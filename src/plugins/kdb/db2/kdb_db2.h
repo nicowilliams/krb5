@@ -142,4 +142,10 @@ krb5_db2_audit_as_req(krb5_context kcontext, krb5_kdc_req *request,
                       krb5_db_entry *client, krb5_db_entry *server,
                       krb5_timestamp authtime, krb5_error_code error_code);
 
+krb5_error_code
+krb5_db2_aname_to_localname(krb5_context context, const char *dbname,
+                            krb5_const_principal princ, unsigned int lnsize,
+                            char *lname);
+
+
 #endif /* KRB5_KDB_DB2_H */

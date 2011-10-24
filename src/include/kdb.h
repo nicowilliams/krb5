@@ -1314,6 +1314,15 @@ typedef struct _kdb_vftabl {
                                                  krb5_const_principal client,
                                                  const krb5_db_entry *server,
                                                  krb5_const_principal proxy);
+    /*
+     * Optional: This method performs principal to username mappings
+     * (using a DB, LDAP, whatever) on behalf of krb5_aname_to_localname().
+     */
+    krb5_error_code (*aname_to_localname)(krb5_context context,
+                                          const char *dbname,
+                                          krb5_const_principal aname,
+                                          const unsigned int lnsize,
+                                          char *lname);
 } kdb_vftabl;
 
 #endif /* !defined(_WIN32) */

@@ -1254,5 +1254,6 @@ kdb_vftabl kdb_function_table = {
     NULL, /* check_policy_tgs */
     NULL, /* audit_as_req */
     NULL, /* refresh_config */
-    kh_db_check_allowed_to_delegate
+    kh_db_check_allowed_to_delegate,
+    NULL  /* aname_to_localname */
 };

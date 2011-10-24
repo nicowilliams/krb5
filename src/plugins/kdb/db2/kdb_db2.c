@@ -1615,3 +1615,93 @@ done:
     return ret;
 }
 
+#include <ctype.h>
+
+krb5_error_code
+krb5_db2_aname_to_localname(krb5_context context, const char *dbname,
+                            krb5_const_principal princ,
+                            const unsigned int lnsize, char *lname)
+{
+    DB *db;
+    DBT key;
+    DBT val;
+    krb5_error_code retval;
+    int ret;
+    char *princ_name;
+    char *foldkey;
+    size_t princ_length;
+    size_t i;
+    const krb5_data *crealm;
+
+    lname[0] = '\0';
+
+    if ((retval = krb5_unparse_name(context, princ, &princ_name)))
+        return(retval);
+    princ_length = strlen(princ_name);
+
+    crealm = krb5_princ_realm(kdc_context, princ);
+
+    db = dbopen(dbname, O_RDONLY, 0, DB_HASH, NULL);
+    if (db == NULL) {
+	krb5_xfree(princ_name);
+        return KRB5_LNAME_CANTOPEN;
+    }
+
+    if (asprintf(&foldkey, "...%.*s", crealm->length, crealm->data) == -1) {
+	krb5_xfree(princ_name);
+	(void) db->close(db);
+        return ENOMEM;
+    }
+    if (foldkey == NULL) {
+	krb5_xfree(princ_name);
+	(void) db->close(db);
+	return ENOMEM;
+    }
+
+    key.data = foldkey;
+    key.size = strlen(foldkey);
+    ret = db->get(db, &key, &val, 0);
+    free(foldkey);
+    if (ret != 1 && ret != 0) {
+	krb5_xfree(princ_name);
+	(void) db->close(db);
+	return KRB5_TRANS_BADFORMAT; /* XXX get a better error? */
+    }
+
+    if (ret == 0) {
+        /*
+         * The realm is an AD realm, so we need to do case-insensitive
+         * principal name lookups.
+         *
+         * XXX Use Unicode case conversions and normalize too!
+         */
+	for (i = 0; i < (princ_length - crealm->length - 1); i++)
+            princ_name[i] = tolower(princ_name[i]);
+    }
+
+    key.data = princ_name;
+    key.size = strlen(princ_name);
+    ret = db->get(db, &key, &val, 0);
+    krb5_xfree(princ_name);
+
+    retval = KRB5_LNAME_NOTRANS;
+    switch (ret) {
+    case 0:
+	if (val.size >- lnsize) {
+            (void) db->close(db);
+            return KRB5_CONFIG_NOTENUFSPACE;
+        }
+        /* We use memcpy() because val.data is NOT NUL-terminated */
+        memcpy(lname, val.data, val.size);
+        lname[val.size] = '\0';
+        retval = 0;
+	break;
+    default:
+	break;
+    }
+
+    /* can't close until we copy the contents. */
+    (void) db->close(db);
+    return retval;
+}
+

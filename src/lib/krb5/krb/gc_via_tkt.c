@@ -417,6 +417,7 @@ krb5_get_cred_via_tkt_ext(krb5_context context, krb5_creds *tkt,
                           krb5_keyblock **out_subkey)
 {
     krb5_error_code retval;
+    krb5_error_code retval_saved = 0;
     krb5_data request_data;
     krb5_data response_data;
     krb5_timestamp timestamp;
@@ -448,8 +449,8 @@ krb5_get_cred_via_tkt_ext(krb5_context context, krb5_creds *tkt,
     if (retval != 0)
         goto cleanup;
 
-send_again:
     use_master = 0;
+send_again:
     retval = krb5_sendto_kdc(context, &request_data,
                              krb5_princ_realm(context, in_cred->server),
                              &response_data, &use_master, tcp_only);
@@ -464,13 +465,25 @@ send_again:
                                                     &err_reply, NULL, NULL);
                 if (retval)
                     goto cleanup;
-                if (err_reply->error == KRB_ERR_RESPONSE_TOO_BIG) {
+		retval = krb5_error_from_rd_error(context, err_reply, NULL);
+		krb5_free_error(context, err_reply);
+		if (retval_saved == 0)
+		    retval_saved = retval;
+
+                if (retval == KRB5KRB_ERR_RESPONSE_TOO_BIG) {
                     tcp_only = 1;
-                    krb5_free_error(context, err_reply);
                     krb5_free_data_contents(context, &response_data);
+		    /* we want the error from TGS exchange over TCP, if any */
+		    retval_saved = 0;
                     goto send_again;
-                }
-                krb5_free_error(context, err_reply);
+                } else if (!use_master) {
+		    use_master = 1;
+		    krb5_free_data_contents(context, &response_data);
+		    goto send_again;
+		} else if (retval_saved) {
+		    /* Don't let retry clobber first error */
+		    retval = retval_saved;
+		}
             }
         }
     } else

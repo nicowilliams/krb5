@@ -42,3 +42,31 @@ krb5_rd_error(krb5_context context, const krb5_data *enc_errbuf,
         return KRB5KRB_AP_ERR_MSG_TYPE;
     return(decode_krb5_error(enc_errbuf, dec_error));
 }
+
+/*ARGSUSED*/
+krb5_error_code KRB5_CALLCONV
+krb5_error_from_rd_error(krb5_context context,
+                         const krb5_error *error,
+                         const krb5_creds *creds)
+{
+    krb5_error_code ret;
+
+    if (error->error > KRB_AP_ERR_IAKERB_KDC_NO_RESPONSE)
+        ret = KRB5KRB_ERR_GENERIC;
+    else
+        ret = ERROR_TABLE_BASE_krb5 - error->error;
+
+    if (error->text.length > 0 && error->text.data != NULL) {
+        krb5_set_error_message(context, ret, "%.*s", error->text.length, error->text.data);
+    } else {
+        /*
+         * Heimdal uses creds to get client and server princ names with
+         * which to format more informative error messages.  We should
+         * probably do the same.
+         */
+        krb5_set_error_message(context, ret, "KDC provided no error text");
+    }
+
+    return ret;
+}
+

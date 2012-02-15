@@ -3308,6 +3308,21 @@ krb5_rd_error(krb5_context context, const krb5_data *enc_errbuf,
               krb5_error **dec_error);
 
 /**
+ * Get a krb5_error_code from a KRB-ERROR message.
+ *
+ * @param [in]  context         Library context
+ * @param [in]  error           Decoded error message
+ * @param [in]  creds           Currently unused
+ *
+ * @return Library error code mapped from the protocol error code
+ */
+krb5_error_code KRB5_CALLCONV
+krb5_error_from_rd_error(krb5_context context,
+                         const krb5_error *error,
+                         const krb5_creds *creds);
+
+
+/**
  * Process @c KRB-SAFE message.
  *
  * @param [in]     context      Library context

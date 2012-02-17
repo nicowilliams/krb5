@@ -36,6 +36,11 @@
 #include <utime.h>
 #include "kdb5.h"
 #include "kdb_hdb.h"
+#include <sys/types.h>
+#include <limits.h>
+#include <ctype.h>
+#include <db.h>
+#include <fcntl.h>
 
 /*
  * WinDC helpers
@@ -566,6 +571,43 @@ cleanup:
     kh_free_Principal(context, hserver);
 
     return code;
+}
+
+static
+int
+policy_db_check(DB *db, char *input, size_t len, const char **status)
+{
+    DBT	key;
+    DBT	val;
+    int	ret;
+
+    key.data = input;
+    key.size = len;
+    ret = db->get(db, &key, &val, 0);
+
+    switch (ret) {
+    case 0:
+	break;
+    case 1:
+	return -1;
+    default:
+	*status = "db->get() failed";
+	return KDC_ERR_POLICY;
+    }
+
+#define	ALLOW_STR	"ALLOW"
+    if (val.size == strlen(ALLOW_STR) &&
+	!strncmp(val.data, ALLOW_STR, strlen(ALLOW_STR)))
+	return 0;
+
+#define DENY_STR	"DENY"
+    if (val.size == strlen(DENY_STR) &&
+	!strncmp(val.data, DENY_STR, strlen(DENY_STR))) {
+	*status = "POLICY VIOLATION";
+	return KDC_ERR_POLICY;
+    }
+
+    return -1;	/* this means: no comment, continue */
 }
 
 krb5_error_code

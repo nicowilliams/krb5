@@ -1251,7 +1251,7 @@ kdb_vftabl kdb_function_table = {
     kh_db_sign_auth_data,
     NULL, /* check_transited_realms */
     kh_db_check_policy_as,
-    NULL, /* check_policy_tgs */
+    ms_db_check_policy_tgs,
     NULL, /* audit_as_req */
     NULL, /* refresh_config */
     kh_db_check_allowed_to_delegate

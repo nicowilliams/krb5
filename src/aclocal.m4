@@ -88,7 +88,6 @@ KRB5_LIB_PARAMS
 KRB5_AC_INITFINI
 KRB5_AC_ENABLE_THREADS
 KRB5_AC_FIND_DLOPEN
-KRB5_AC_KEYRING_CCACHE
 ])dnl
 
 dnl Maintainer mode, akin to what automake provides, 'cept we don't

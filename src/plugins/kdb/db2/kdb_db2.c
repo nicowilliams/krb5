@@ -1464,6 +1464,45 @@ policy_db_check(DB *db, char *input, size_t len, const char **status)
     return -1;  /* this means: no comment, continue */
 }
 
+/*
+ * This function implements a cross-realm policy/whitelist DB per-server
+ * realm containing whitelisted client realms or principals (including
+ * the realm part), as well as an option for case-insensitive matching.
+ *
+ * If the policy DB does not exist for a given server's realm then the
+ * TGS request is allowed.
+ *
+ * If the client's realm is whitelisted in the DB then the TGS request
+ * is allowed.
+ *
+ * If the client's principal name (including realm) is whitelisted in
+ * the DB then the request is allowed.
+ *
+ * There's also a way to indicate that a realm is case-insensitive for
+ * principal names, in which case we fold case on the principal name
+ * before doing that database lookup.
+ *
+ * Else the request is denied.
+ *
+ * The database is configured in kdc.conf
+ *     [realms]
+ *         SERVICE-PRINC-REALM-NAME = { 
+ *             xrealm_policy_db = /var/this/that/foo.db
+ *             ...
+ *         }
+ *
+ * The database values are either "ALLOW" or "DENY".
+ *
+ * The database keys are:
+ *
+ * <REALM-NAME>
+ * ...<REALM-NAME>
+ * <client-principal@REALM-NAME>
+ *
+ * The ...<REALM-NAME> entry, if present, indicates that REALM-NAME is
+ * case-insensitive for principal name matching.
+ */
+
 krb5_error_code
 krb5_db2_check_policy_tgs(krb5_context kcontext,
                           krb5_kdc_req *request,
@@ -1474,13 +1513,47 @@ krb5_db2_check_policy_tgs(krb5_context kcontext,
 {
     krb5_error_code     ret;
     krb5_data           *crealm;
+    krb5_data           *srealm;
+    char                *srealm_str;
     char                *cname = NULL;
+    char                *dbname = NULL;
     DB                  *db = NULL;
-    char                foldpre[4] = "...";
     char                *foldkey;
-    unsigned int        fold = 0;
-    int                 i;
+    size_t              i;
     int                 cnamel;
+
+    *status = NULL;
+    srealm = krb5_princ_realm(kcontext, server->princ);
+    crealm = krb5_princ_realm(kcontext, ticket->enc_part2->client);
+
+    /* Allow any to any within same realm */
+    if (crealm->length == srealm->length &&
+        !strncmp(crealm->data, srealm->data, srealm->length))
+        return 0;
+
+    /* Short circuit test for reasonable realms... */
+#define GOOD_REALM     "MSAD.MS.COM"
+    if (crealm->length == strlen(GOOD_REALM) &&
+        !strncmp(crealm->data, GOOD_REALM, strlen(GOOD_REALM)))
+        return 0;
+
+    /* Get policy DB name for the server's realm */
+    srealm_str = malloc(srealm->length + 1);
+    if (srealm_str == NULL)
+        return KRB5KDC_ERR_POLICY;
+    memcpy(srealm_str, srealm->data, srealm->length);
+    srealm_str[srealm->length] = '\0';
+    ret = profile_get_string(kcontext->profile, KDB_REALM_SECTION,
+                             srealm_str, "xrealm_policy_db", NULL, &dbname);
+    free(srealm_str);
+    if (ret) {
+        *status = "Could not read xrealm_policy_db krb5.conf parameter";
+        return ret;
+    }
+
+    /* No policy DB configured for the server's realm -> allow */
+    if (dbname == NULL)
+        return 0;
 
     /*
      * Note that there's nothing for us to do with e_data in a TGS
@@ -1488,76 +1561,48 @@ krb5_db2_check_policy_tgs(krb5_context kcontext,
      * in as NULL already too, so we don't have to initialize it.
      */
 
-    crealm = krb5_princ_realm(kcontext, ticket->enc_part2->client);
-
-    /* Short circuit test for reasonable realms... */
-#define GOOD_REALM1     "is1.morgan"
-    if (crealm->length == strlen(GOOD_REALM1) &&
-        !strncmp(crealm->data, GOOD_REALM1, strlen(GOOD_REALM1)))
-        return 0;
-
-    /* Short circuit test for reasonable realms... */
-#define GOOD_REALM2     "MSAD.MS.COM"
-    if (crealm->length == strlen(GOOD_REALM2) &&
-        !strncmp(crealm->data, GOOD_REALM2, strlen(GOOD_REALM2)))
-        return 0;
-
-#define DB_PATH "/var/kerberos/policy.db"
-    db = dbopen(DB_PATH, O_RDONLY, 0, DB_HASH, NULL);
+    db = dbopen(dbname, O_RDONLY, 0, DB_HASH, NULL);
+    profile_release_string(dbname);
     if (!db) {
-        *status = "dbopen() failed";
+	*status = "CANNOT OPEN CROSS-REALM POLICY DATABASE";
         return KDC_ERR_POLICY;
     }
 
-    ret = policy_db_check(db, crealm->data, crealm->length, status);
-    switch (ret) {
-    case -1:
-        break;
-    case  0:
-    default:
-        goto done;
-    }
-
-    /* if a ...REALM entry exists, we must lowercase the principal */
-    foldkey = calloc(1, strlen(foldpre) + crealm->length + 1 );
-    if (foldkey == NULL) {
-        ret = ENOMEM;
-        goto done;
-    }
-    strncat(foldkey, foldpre, strlen(foldpre));
-    strncat(foldkey, crealm->data, crealm->length);
-
-    ret = policy_db_check(db, foldkey, strlen(foldkey), status);
-    free(foldkey);
-
-    switch (ret) {
-    case -1:
-        break;
-    case  0:
-        fold = 1;
-        break;
-    default:
-        goto done;
-    }
-
     ret = krb5_unparse_name(kcontext, ticket->enc_part2->client, &cname);
-
     if (ret) {
         *status = "MALFORMED CLIENT NAME";
         ret = KRB5KDC_ERR_POLICY;
         goto done;
     } 
-
     cnamel = strlen(cname);
-    if (fold == 1) {
-        for (i = 0; i < cnamel; i++) {
-            if (i < (cnamel - crealm->length - 1))
-                cname[i] = tolower(cname[i]);
-        }
+
+    ret = policy_db_check(db, crealm->data, crealm->length, status);
+    if (ret != -1)
+        goto done; /* Entire client realm whitelisted or blacklisted */
+
+    /* if a ...REALM entry exists, we must lowercase the principal */
+    if (asprintf(&foldkey, "...%.*s", crealm->length, crealm->data) < 0) {
+	*status = "out of memory";
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = policy_db_check(db, foldkey, strlen(foldkey), status);
+    free(foldkey);
+    if (ret > 0) {
+        goto done;
+    } else if (ret == 0) {
+        /* Client realm is case-insensitive for princ names, so fold case */
+        for (i = 0; i < (cnamel - crealm->length - 1); i++)
+            cname[i] = tolower(cname[i]);
     }
 
     ret = policy_db_check(db, cname, cnamel, status);
     if (ret == -1) {
+        /*
+         * We have a DB, the crealm is not on the whitelist and the
+         * cname is also not on the whitelist -> fail
+         */
         *status = "POLICY NOT FOUND: DENY";
         ret = KDC_ERR_POLICY;
     }

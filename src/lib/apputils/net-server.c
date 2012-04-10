@@ -498,6 +498,7 @@ make_event(verto_ctx *ctx, verto_ev_flag flags, verto_callback callback,
 
     if (addevent) {
         if (!ADD(events, ev, tmp)) {
+	    krb5_klog_syslog(LOG_ERR, _("Cannot add event for socket %d"), sock);
             com_err(conn->prog, ENOMEM, _("cannot save event"));
             verto_del(ev);
             return NULL;
@@ -1689,7 +1690,7 @@ accept_tcp_connection(verto_ctx *ctx, verto_ev *ev)
     set_cloexec_fd(s);
 #ifndef _WIN32
     if (s >= FD_SETSIZE) {
-        krb5_klog_syslog(LOG_INFO, _("closing connected socket fd %d because too large"), s);
+        krb5_klog_syslog(LOG_ERR, _("closing connected socket fd %d because too large"), s);
         close(s);
         return;
     }
@@ -1739,6 +1740,7 @@ accept_tcp_connection(verto_ctx *ctx, verto_ev *ev)
         kill_lru_tcp_or_rpc_connection(conn->handle, newev);
 
     if (newconn->buffer == 0) {
+        krb5_klog_syslog(LOG_INFO, _("dropping fd %d because of ENOMEM"), s);
         com_err(conn->prog, errno,
                 _("allocating buffer for new TCP session from %s"),
                 newconn->addrbuf);
@@ -1814,6 +1816,7 @@ prepare_for_dispatch(verto_ctx *ctx, verto_ev *ev)
     state->ctx = ctx;
     verto_set_private(ev, NULL, NULL); /* Don't close the fd or free conn! */
     remove_event_from_set(ev); /* Remove it from the set. */
+    krb5_klog_syslog(LOG_INFO, _("Is this an interesting event?"));
     verto_del(ev);
     return state;
 }
@@ -1910,6 +1913,7 @@ process_tcp_connection_read(verto_ctx *ctx, verto_ev *ev)
     return;
 
 kill_tcp_connection:
+    krb5_klog_syslog(LOG_INFO, _("Problem reading"));
     verto_del(ev);
 }
 
@@ -1951,6 +1955,7 @@ process_tcp_connection_write(verto_ctx *ctx, verto_ev *ev)
     /* Finished sending.  We should go back to reading, though if we
      * sent a FIELD_TOOLONG error in reply to a length with the high
      * bit set, RFC 4120 says we have to close the TCP stream. */
+    krb5_klog_syslog(LOG_INFO, _("Done writing response to socket"));
     verto_del(ev);
 }
 

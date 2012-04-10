@@ -1689,6 +1689,7 @@ accept_tcp_connection(verto_ctx *ctx, verto_ev *ev)
     set_cloexec_fd(s);
 #ifndef _WIN32
     if (s >= FD_SETSIZE) {
+        krb5_klog_syslog(LOG_INFO, _("closing connected socket fd %d because too large"), s);
         close(s);
         return;
     }
@@ -1702,6 +1703,7 @@ accept_tcp_connection(verto_ctx *ctx, verto_ev *ev)
 
     newev = add_tcp_read_fd(&sockdata, s);
     if (newev == NULL) {
+        krb5_klog_syslog(LOG_INFO, _("closing connected socket fd %d because failed to add to ev loop"), s);
         close(s);
         return;
     }
@@ -1767,8 +1769,12 @@ process_tcp_response(void *arg, krb5_error_code code, krb5_data *response)
     assert(state);
     state->conn->response = response;
 
-    if (code)
+    if (code) {
+        krb5_klog_syslog(LOG_ERR, _("closing socket because of error code %d"), code);
         com_err(state->conn->prog, code, _("while dispatching (tcp)"));
+    } else if (!response) {
+        krb5_klog_syslog(LOG_ERR, _("closing socket because no response"));
+    }
     if (code || !response)
         goto kill_tcp_connection;
 

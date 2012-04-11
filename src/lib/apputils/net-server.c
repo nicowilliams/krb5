@@ -1816,7 +1816,6 @@ prepare_for_dispatch(verto_ctx *ctx, verto_ev *ev)
     state->ctx = ctx;
     verto_set_private(ev, NULL, NULL); /* Don't close the fd or free conn! */
     remove_event_from_set(ev); /* Remove it from the set. */
-    krb5_klog_syslog(LOG_INFO, _("Is this an interesting event?"));
     verto_del(ev);
     return state;
 }
@@ -1955,7 +1954,6 @@ process_tcp_connection_write(verto_ctx *ctx, verto_ev *ev)
     /* Finished sending.  We should go back to reading, though if we
      * sent a FIELD_TOOLONG error in reply to a length with the high
      * bit set, RFC 4120 says we have to close the TCP stream. */
-    krb5_klog_syslog(LOG_INFO, _("Done writing response to socket"));
     verto_del(ev);
 }
 

@@ -1289,7 +1289,7 @@ loop_setup_network(verto_ctx *ctx, void *handle, const char *prog, int inetd_fd)
     if (inetd_fd > -1) {
         int type, len;
 
-        len = sizeof (typpe);
+        len = sizeof (type);
         if (getsockopt(inetd_fd, SOL_SOCKET, SO_TYPE, &type, &len)) {
             com_err(prog, 0, _("getsockopt() on inetd socket failed"));
             exit (1);
@@ -1303,7 +1303,7 @@ loop_setup_network(verto_ctx *ctx, void *handle, const char *prog, int inetd_fd)
                 exit (1);
             }
         } else { /* XXX Should we check type here? */
-            if (add_tcp_listener_fd(data, inetd_fd) == NULL) {
+            if (add_tcp_listener_fd(&setup_data, inetd_fd) == NULL) {
                 com_err(prog, 0, _("Failed to add TCP socket from inetd "
                                    "to event loop"));
                 exit (1);

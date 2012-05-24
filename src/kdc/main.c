@@ -830,16 +830,16 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
             devnull = open(_PATH_DEVNULL, O_RDONLY);
             if (devnull == -1) {
                 com_err(argv[0], 0, _("could not open " _PATH_DEVNULL));
-                exit(1)
+                exit(1);
             }
             inetd_fd = dup(STDIN_FILENO);
             if (inetd_fd == -1) {
                 com_err(argv[0], 0, _("could not dup inetd file descriptor"));
-                exit(1)
+                exit(1);
             }
             if (dup2(devnull, STDIN_FILENO) == -1) {
                 com_err(argv[0], 0, _("could not dup " _PATH_DEVNULL " fd"));
-                exit(1)
+                exit(1);
             }
             (void) close(devnull);
             nowait = 0;                 /* inetd wait service */

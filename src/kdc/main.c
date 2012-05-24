@@ -827,7 +827,7 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
             mkey_name = optarg;
             break;
         case 'i':
-            devnull = open(_PATH_DEVNULL, O_RDONLY);
+            devnull = open(_PATH_DEVNULL, O_RDWR);
             if (devnull == -1) {
                 com_err(argv[0], 0, _("could not open " _PATH_DEVNULL));
                 exit(1);
@@ -837,7 +837,9 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
                 com_err(argv[0], 0, _("could not dup inetd file descriptor"));
                 exit(1);
             }
-            if (dup2(devnull, STDIN_FILENO) == -1) {
+            if (dup2(devnull, STDIN_FILENO) == -1 ||
+		dup2(devnull, STDOUT_FILENO) == -1 ||
+		dup2(devnull, STDERR_FILENO) == -1) {
                 com_err(argv[0], 0, _("could not dup " _PATH_DEVNULL " fd"));
                 exit(1);
             }

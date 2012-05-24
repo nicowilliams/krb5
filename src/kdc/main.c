@@ -59,6 +59,15 @@
 #include <ctype.h>
 #include <sys/wait.h>
 
+#ifdef HAVE_PATHS_H
+#include <paths.h>
+#endif
+
+#ifndef _PATH_DEVNULL
+#define _PATH_DEVNULL "/dev/null"
+#endif
+
+
 #include "k5-int.h"
 #include "com_err.h"
 #include "adm.h"
@@ -818,9 +827,9 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
             mkey_name = optarg;
             break;
         case 'i':
-            devnull = open("/dev/null", O_RDONLY);
+            devnull = open(_PATH_DEVNULL, O_RDONLY);
             if (devnull == -1) {
-                com_err(argv[0], 0, _("could not open /dev/null"));
+                com_err(argv[0], 0, _("could not open " _PATH_DEVNULL));
                 exit(1)
             }
             inetd_fd = dup(STDIN_FILENO);
@@ -829,7 +838,7 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
                 exit(1)
             }
             if (dup2(devnull, STDIN_FILENO) == -1) {
-                com_err(argv[0], 0, _("could not dup /dev/null fd"));
+                com_err(argv[0], 0, _("could not dup " _PATH_DEVNULL " fd"));
                 exit(1)
             }
             (void) close(devnull);

@@ -85,7 +85,9 @@ static void initialize_realms (krb5_context, int, char **);
 static void finish_realms (void);
 
 static int nofork = 0;
+static int nowait = 1;
 static int workers = 0;
+static int inetd_fd = -1;
 static const char *pid_file = NULL;
 static int rkey_init_done = 0;
 static volatile int signal_received = 0;
@@ -659,7 +661,7 @@ usage(char *name)
               "where,\n"
               "\t[-x db_args]* - Any number of database specific arguments.\n"
               "\t\t\tLook at each database module documentation for "
-              "\t\t\tsupported arguments\n"),
+              "\t\t\tsupported arguments.\n"),
             name);
     exit(1);
 }
@@ -685,6 +687,7 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
     char                *host_based_srvcs = NULL;
     int                  db_args_size = 0;
     char                **db_args = NULL;
+    int                 devnull = -1;
 
     extern char *optarg;
 
@@ -735,7 +738,7 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
      * Loop through the option list.  Each time we encounter a realm name,
      * use the previously scanned options to fill in for defaults.
      */
-    while ((c = getopt(argc, argv, "x:r:d:mM:k:R:e:P:p:s:nw:4:X3")) != -1) {
+    while ((c = getopt(argc, argv, "ix:r:d:mM:k:R:e:P:p:s:nw:4:X3")) != -1) {
         switch(c) {
         case 'x':
             db_args_size++;
@@ -813,6 +816,25 @@ initialize_realms(krb5_context kcontext, int argc, char **argv)
             break;
         case 'M':                       /* master key name in DB */
             mkey_name = optarg;
+            break;
+        case 'i':
+            devnull = open("/dev/null", O_RDONLY);
+            if (devnull == -1) {
+                com_err(argv[0], 0, _("could not open /dev/null"));
+                exit(1)
+            }
+            inetd_fd = dup(STDIN_FILENO);
+            if (inetd_fd == -1) {
+                com_err(argv[0], 0, _("could not dup inetd file descriptor"));
+                exit(1)
+            }
+            if (dup2(devnull, STDIN_FILENO) == -1) {
+                com_err(argv[0], 0, _("could not dup /dev/null fd"));
+                exit(1)
+            }
+            (void) close(devnull);
+            nowait = 0;                 /* inetd wait service */
+            nofork++;
             break;
         case 'n':
             nofork++;                   /* don't detach from terminal */
@@ -1058,11 +1080,13 @@ int main(int argc, char **argv)
      * platform has pktinfo support and doesn't need reconfigs.
      */
     if (workers == 0) {
-        retval = loop_setup_routing_socket(ctx, NULL, kdc_progname);
-        if (retval) {
-            kdc_err(kcontext, retval, _("while initializing routing socket"));
-            finish_realms();
-            return 1;
+        if (!nowait) {
+            retval = loop_setup_routing_socket(ctx, NULL, kdc_progname);
+            if (retval) {
+                kdc_err(kcontext, retval, _("while initializing routing socket"));
+                finish_realms();
+                return 1;
+            }
         }
         retval = loop_setup_signals(ctx, NULL, reset_for_hangup);
         if (retval) {
@@ -1071,7 +1095,7 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    if ((retval = loop_setup_network(ctx, NULL, kdc_progname))) {
+    if ((retval = loop_setup_network(ctx, NULL, kdc_progname, inetd_fd))) {
     net_init_error:
         kdc_err(kcontext, retval, _("while initializing network"));
         finish_realms();

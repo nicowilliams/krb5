@@ -47,6 +47,8 @@ krb5kdc \- Kerberos V5 KDC
 .B \-r
 .I realm
 ] [
+.B \-i
+] [
 .B \-n
 ] [
 .B \-w
@@ -132,6 +134,15 @@ The
 .B \-m
 option specifies that the master database password should be fetched
 from the keyboard rather than from a file on disk.
+.PP
+The
+.B \-i
+option indicates that the KDC is started from inetd as a wait service,
+with the listener socket being open on file descriptor numbers 0, 1,
+and 2.  This option also causes the KDC not to put itself in the
+background.  The
+.B \-w
+option can be used together with this option.
 .PP
 The
 .B \-n

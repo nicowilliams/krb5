@@ -257,14 +257,21 @@ master.  Default is "2m" (that is, two minutes).
 
 .IP supported_enctypes
 list of key:salt strings that specifies the default key/salt
-combinations of principals for this realm
+combinations of principals for this realm.
+
+.IP des_crc_session_supported
+this
+.B boolean
+specifies whether the KDC should assume that service principals support
+the des-cbc-crc enctype for session key enctype negotiation purposes.
+Defaults to true.
 
 .IP reject_bad_transit
 this
 .B boolean
 specifies whether or not the list of transited realms for cross-realm
 tickets should be checked against the transit path computed from the
-realm names and the [capaths] section of its krb5.conf file
+realm names and the [capaths] section of its krb5.conf file.
 
 .SH FILES 
 /usr/local/var/krb5kdc/kdc.conf

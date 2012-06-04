@@ -131,6 +131,8 @@
 #define KRB5_KDB_FLAGS_S4U                      ( KRB5_KDB_FLAG_PROTOCOL_TRANSITION | \
                                                   KRB5_KDB_FLAG_CONSTRAINED_DELEGATION )
 
+#define KRB5_KDB_SK_SESSION_ENCTYPES            "session_enctypes"
+
 #if !defined(_WIN32)
 
 /*

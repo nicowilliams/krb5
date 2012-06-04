@@ -269,6 +269,12 @@ subsection:
     listed in **host_based_services**.  ``no_host_referral = *`` will
     disable referral processing altogether.
 
+**des_crc_session_supported**
+    A boolean value (@true, false).  If set to true, the KDC will
+    assume that service principals support des-cbc-crc for session
+    key enctype negotiation purposes.  If des-cbc-crc is not
+    permitted then this has no effect.  Defaults to true.
+
 **reject_bad_transit**
     (Boolean value.)  If set to true, the KDC will check the list of
     transited realms for cross-realm tickets against the transit path

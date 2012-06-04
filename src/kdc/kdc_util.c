@@ -1526,13 +1526,60 @@ dbentry_has_key_for_enctype(krb5_context context, krb5_db_entry *client,
 {
     krb5_error_code     retval;
     krb5_key_data       *datap;
+    char                *etypes_str;
 
+    /*
+     * Lookup the supported session key enctypes list in the KDB.
+     */
+    retval = krb5_dbe_get_string(context, client,
+                                 KRB5_KDB_SK_SESSION_ENCTYPES,
+                                 &etypes_str);
+    if (retval == 0 && etypes_str != NULL && etypes_str[0]) {
+        krb5_enctype        default_enctypes[1] = { 0 };
+        krb5_enctype        *etypes;
+
+        /*
+         * krb5int_parse_enctype_list() can invoke a TRACE macro and for that
+         * it wants a profile key, but here we don't have one.
+         */
+        retval = krb5int_parse_enctype_list(context,
+                                            "KDB-supported-session-etypes",
+                                            etypes_str, default_enctypes,
+                                            &etypes);
+        free(etypes_str);
+        if (retval == 0 && etypes != NULL && etypes[0]) {
+            size_t i;
+
+            for (i = 0; etypes[i]; i++)
+                if (enctype == etypes[i])
+                    return 1;
+            return 0;
+        }
+        /* Fallthrough on error or empty list */
+    } else {
+        free(etypes_str);
+    }
+
+    /*
+     * If it's DES_CBC_MD5, there's a bit in the attribute mask which
+     * checks to see if we support it.  For now, treat it as always
+     * clear.  We check this after checking the session-enctypes string
+     * on the principal, so that it's possible to enable the use of
+     * DES_CBC_MD5 session keys.
+     *
+     * In theory everything's supposed to support DES_CBC_MD5, but
+     * that's not the reality....
+     */
+    if (enctype == ENCTYPE_DES_CBC_MD5)
+        return 0;
+
+    /*
+     * This means that any enctype for which there's a long-term key is
+     * assumed to be supported as a session key enctype.
+     */
     retval = krb5_dbe_find_enctype(context, client, enctype,
                                    -1, 0, &datap);
-    if (retval)
-        return 0;
-    else
-        return 1;
+    return !retval;
 }
 
 /*
@@ -1549,20 +1596,12 @@ dbentry_supports_enctype(krb5_context context, krb5_db_entry *client,
                          krb5_enctype enctype)
 {
     /*
-     * If it's DES_CBC_MD5, there's a bit in the attribute mask which
-     * checks to see if we support it.  For now, treat it as always
-     * clear.
-     *
-     * In theory everything's supposed to support DES_CBC_MD5, but
-     * that's not the reality....
+     * If configured to we assume everything can understand DES_CBC_CRC.  We
+     * used to always do so, but now with the session-enctypes string in
+     * principals we can stop making assumptions about enctypes supported for
+     * session keys.
      */
-    if (enctype == ENCTYPE_DES_CBC_MD5)
-        return 0;
-
-    /*
-     * XXX we assume everything can understand DES_CBC_CRC
-     */
-    if (enctype == ENCTYPE_DES_CBC_CRC)
+    if (assume_des_crc_sess && enctype == ENCTYPE_DES_CBC_CRC)
         return 1;
 
     /*

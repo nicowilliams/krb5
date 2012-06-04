@@ -1760,6 +1760,12 @@ will have keys of these types.  The default value for this tag is
 @value{DefaultSupportedEnctypes}. For lists of possible values, see
 @ref{Supported Encryption Types} and @ref{Salts}.
 
+@itemx des_crc_session_supported
+A boolean value (@code{true}, @code{false}).  If set to @code{true}, the
+KDC will assume that service principals support des-cbc-crc for session
+key enctype negotiation purposes.  If des-cbc-crc is not permitted then
+this has no effect.  Defaults to @code{true}.
+
 @itemx reject_bad_transit
 A boolean value (@code{true}, @code{false}).  If set to @code{true}, the
 KDC will check the list of transited realms for cross-realm tickets

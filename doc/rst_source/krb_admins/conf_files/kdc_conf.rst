@@ -128,6 +128,8 @@ For each realm, the following tags may be specified in the [realms] subsection:
     (Delta time string.) Specifies the maximum time period during which a valid ticket may be renewed in this realm. The default value is 0. 
 **no_host_referral**
     (Whitespace- or comma-separated list) This relation blocks the specified services from host-based referral processing, even if the client marks the server principal as host-based or the service is also listed in *host_based_services*. *no_host_referral* = \*  will disable referral processing altogether.
+**des_crc_session_supported**
+    A boolean value (@true, false).  If set to true, the KDC will assume that service principals support des-cbc-crc for session key enctype negotiation purposes.  If des-cbc-crc is not permitted then this has no effect.  Defaults to true.
 **reject_bad_transit**
     A boolean value (true, false). If set to true, the KDC will check the list of transited realms for cross-realm tickets against the transit path computed from the realm names and the capaths section of its krb5.conf file; if the path in the ticket to be issued contains any realms not in the computed path, the ticket will not be issued, and an error will be returned to the client instead. If this value is set to false, such tickets will be issued anyways, and it will be left up to the application server to validate the realm transit path.
 

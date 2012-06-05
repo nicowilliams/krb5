@@ -214,6 +214,54 @@ warn_pw_expiry(krb5_context context, krb5_get_init_creds_opt *options,
     (*prompter)(context, data, 0, banner, 0, 0);
 }
 
+static krb5_error_code
+krb5_get_as_key_keyblock(krb5_context context, krb5_principal client,
+                         krb5_enctype etype, krb5_prompter_fct prompter,
+                         void *prompter_data, krb5_data *salt,
+                         krb5_data *params, krb5_keyblock *as_key,
+                         void *gak_data)
+{
+    *as_key = *(krb5_keyblock *)gak_data;
+
+    return 0;
+}
+
+krb5_error_code KRB5_CALLCONV
+krb5_get_init_creds_skey(krb5_context context, krb5_creds *creds,
+                         krb5_principal client, krb5_keyblock *arg_keyblock,
+                         krb5_deltat start_time, char *in_tkt_service,
+                         krb5_get_init_creds_opt *options)
+{
+    krb5_error_code ret;
+    int             use_master = 0;
+
+    ret = krb5int_get_init_creds(context, creds, client, NULL, NULL,
+                                 start_time, in_tkt_service, options,
+                                 krb5_get_as_key_keyblock, (void *)
+                                 arg_keyblock, &use_master, NULL);
+
+    /*
+     * If we either succeed or permanently fail, return.
+     * Also return if we were just chatting with the master.
+     */
+
+    if (!ret || (ret == KRB5_KDC_UNREACH) ||
+        (ret == KRB5_REALM_CANT_RESOLVE) ||
+        (use_master == 1))
+        return ret;
+
+    /*
+     * Otherwise let's try the master and see if we get a more
+     * interesting result.
+     */
+
+    use_master = 1;
+    return krb5int_get_init_creds(context, creds, client, NULL, NULL,
+                                  start_time, in_tkt_service, options,
+                                  krb5_get_as_key_keyblock, (void *)
+                                  arg_keyblock, &use_master, NULL);
+}
+
 krb5_error_code KRB5_CALLCONV
 krb5_get_init_creds_password(krb5_context context,
                              krb5_creds *creds,

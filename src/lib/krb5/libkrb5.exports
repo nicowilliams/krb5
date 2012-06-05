@@ -386,6 +386,7 @@ krb5_get_init_creds_opt_set_renew_life
 krb5_get_init_creds_opt_set_salt
 krb5_get_init_creds_opt_set_tkt_life
 krb5_get_init_creds_password
+krb5_get_init_creds_skey
 krb5_get_krbhst
 krb5_get_notification_message
 krb5_get_permitted_enctypes

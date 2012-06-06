@@ -6680,6 +6680,49 @@ krb5_get_init_creds_password(krb5_context context, krb5_creds *creds,
                              krb5_deltat start_time, char *in_tkt_service,
                              krb5_get_init_creds_opt *k5_gic_options);
 
+#ifdef KRB5_DEPRECATED
+/**
+ * Get initial credentials using a keyblock.
+ *
+ * @param [in]  context         Library context
+ * @param [out] creds           New credentials
+ * @param [in]  client          Client principal
+ * @param [in]  key             Keyblock
+ * @param [in]  start_time      Time when ticket becomes valid (0 for now)
+ * @param [in]  in_tkt_service  Service name of initial credentials (or NULL)
+ * @param [in]  k5_gic_options  Initial credential options
+ *
+ * This function requests KDC for an initial credentials for @a client using @a
+ * key.  If @a in_tkt_service is specified, it is parsed as a principal
+ * name (with the realm ignored) and used as the service principal for
+ * the request; otherwise the ticket-granting service is used.
+ *
+ * @sa krb5_verify_init_creds()
+ *
+ * @retval
+ *  0    Success
+ * @retval
+ *  EINVAL Invalid argument
+ * @retval
+ *  KRB5_KDC_UNREACH Cannot contact any KDC for requested realm
+ * @retval
+ *  KRB5_PREAUTH_FAILED Generic Pre-athentication failure
+ * @retval
+ *  KRB5_REALM_CANT_RESOLVE Cannot resolve network address for KDC in requested realm
+ * @retval
+ *  KRB5KDC_ERR_KEY_EXP Password/key has expired
+ * @retval
+ *  KRB5KRB_AP_ERR_BAD_INTEGRITY Key mismatch
+ * @return
+ * Kerberos error codes
+ */
+krb5_error_code KRB5_CALLCONV
+krb5_get_init_creds_skey(krb5_context context, krb5_creds *creds,
+                         krb5_principal client, krb5_keyblock *arg_keyblock,
+                         krb5_deltat start_time, char *in_tkt_service,
+                         krb5_get_init_creds_opt *options);
+#endif
+
 struct _krb5_init_creds_context;
 typedef struct _krb5_init_creds_context *krb5_init_creds_context;
 

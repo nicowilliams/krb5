@@ -1572,6 +1572,21 @@ dbentry_supports_enctype(krb5_context context, krb5_db_entry *client,
     return dbentry_has_key_for_enctype(context, client, enctype);
 }
 
+/* This function is a very ugly hack to allow for an exception to the
+ * permitted_enctypes setting on a per-service principal basis. The KDC
+ * checks this in two places, and unfortunately the function is
+ * coppied and pasted now, as the database abstraction layer complicates
+ * the exporting/loading of symbols.
+ *
+ * Calls to this function are in:
+ *
+ * krb5_dbe_def_search_enctype  in    src/kdc/kdc_util.c
+ * select_session_keytype       in    src/lib/kdb/kdb_default.c
+ *
+ * Blame: Murray Schwalbaum <schwalmu@ms.com>
+ *
+ */
+
 void
 check_ignore_permitted_enctypes(krb5_context context, krb5_principal principal,
                                     int *ignore)

@@ -1572,6 +1572,53 @@ dbentry_supports_enctype(krb5_context context, krb5_db_entry *client,
     return dbentry_has_key_for_enctype(context, client, enctype);
 }
 
+void
+check_ignore_permitted_enctypes(krb5_context context, krb5_principal principal,
+                                    int *ignore)
+{
+    int         ret;
+    char        **princs = NULL;
+    char        **tmp = NULL;
+    char        *profile_input[10];
+    char        *sprinc = NULL;
+
+    /* explicitly off by default*/
+    *ignore = 0;
+
+    /* fail closed in case of memory pressure */
+    if (krb5_unparse_name(context, principal, &sprinc))
+        return;
+
+
+    profile_input[0] = "kdc";
+    profile_input[1] = "ignore_permitted_enctypes_for_sprinc";
+    profile_input[2] = NULL;
+
+    ret = profile_get_values(context->profile, (const char **) profile_input,
+                             &princs);
+
+    /* still failing closed */
+    if (ret || !princs[0]) {
+        goto cleanup;
+    }
+
+    for (tmp = princs; *tmp; tmp++) {
+        if(!strcmp(sprinc, tmp[0])) {
+            *ignore = 1;
+            break;
+        }
+    }
+
+cleanup:
+    if (princs)
+        profile_free_list(princs);
+    if (sprinc)
+        free(sprinc);
+
+    return;
+
+}
+
 /*
  * This function returns the keytype which should be selected for the
  * session key.  It is based on the ordered list which the user
@@ -1582,12 +1629,18 @@ select_session_keytype(krb5_context context, krb5_db_entry *server,
                        int nktypes, krb5_enctype *ktype)
 {
     int         i;
+    int         ignore_permitted_enctypes;
+
+    check_ignore_permitted_enctypes(context, server->princ,
+                                    &ignore_permitted_enctypes);
+
 
     for (i = 0; i < nktypes; i++) {
         if (!krb5_c_valid_enctype(ktype[i]))
             continue;
 
-        if (!krb5_is_permitted_enctype(context, ktype[i]))
+        if (!ignore_permitted_enctypes &&
+            !krb5_is_permitted_enctype(context, ktype[i]))
             continue;
 
         if (dbentry_supports_enctype(context, server, ktype[i]))

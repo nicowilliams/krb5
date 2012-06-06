@@ -36,6 +36,54 @@
 #include <arpa/inet.h>
 
 
+void
+check_ignore_permitted_enctypes(krb5_context context, krb5_principal principal,
+                                    int *ignore)
+{
+    int         ret;
+    char        **princs = NULL;
+    char        **tmp = NULL;
+    char        *profile_input[10];
+    char        *sprinc = NULL;
+
+    /* explicitly off by default*/
+    *ignore = 0;
+
+    /* fail closed in case of memory pressure */
+    if (krb5_unparse_name(context, principal, &sprinc))
+        return;
+
+
+    profile_input[0] = "kdc";
+    profile_input[1] = "ignore_permitted_enctypes_for_sprinc";
+    profile_input[2] = NULL;
+
+    ret = profile_get_values(context->profile, (const char **) profile_input,
+                             &princs);
+
+    /* still failing closed */
+    if (ret || !princs[0]) {
+        goto cleanup;
+    }
+
+    for (tmp = princs; *tmp; tmp++) {
+        if(!strcmp(sprinc, tmp[0])) {
+            *ignore = 1;
+            break;
+        }
+    }
+
+cleanup:
+    if (princs)
+        profile_free_list(princs);
+    if (sprinc)
+        free(sprinc);
+
+    return;
+
+}
+
+
 /*
  * Given a particular enctype and optional salttype and kvno, find the
  * most appropriate krb5_key_data entry of the database entry.
@@ -56,9 +104,13 @@ krb5_dbe_def_search_enctype(kcontext, dbentp, start, ktype, stype, kvno, kdatap)
 {
     int                 i, idx;
     int                 maxkvno;
+    int                 ignore_permitted_enctypes;
     krb5_key_data       *datap;
     krb5_error_code     ret;
     krb5_boolean        saw_non_permitted = FALSE;
+
+    check_ignore_permitted_enctypes(kcontext, dbentp->princ,
+                                    &ignore_permitted_enctypes);
 
     ret = 0;
     if (kvno == -1 && stype == -1 && ktype == -1)
@@ -101,8 +153,11 @@ krb5_dbe_def_search_enctype(kcontext, dbentp, start, ktype, stype, kvno, kdatap)
             continue;
 
         /* Filter out non-permitted enctypes. */
-        if (!krb5_is_permitted_enctype(kcontext,
-                                       dbentp->key_data[i].key_data_type[0])) {
+	if (!ignore_permitted_enctypes &&
+            !krb5_is_permitted_enctype(kcontext,
+                                       dbentp->key_data[i].key_data_type[0]))
+{
+         
             saw_non_permitted = TRUE;
             continue;
         }

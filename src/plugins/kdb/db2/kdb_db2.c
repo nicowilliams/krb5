@@ -820,6 +820,7 @@ krb5_db2_put_principal(krb5_context context, krb5_db_entry *entry,
     krb5_data contdata, keydata;
     krb5_error_code retval;
     krb5_db2_context *dbc;
+    krb5_dbinc_ctx ictx;
 
     krb5_clear_error_message (context);
     if (db_args) {
@@ -837,11 +838,23 @@ krb5_db2_put_principal(krb5_context context, krb5_db_entry *entry,
     if ((retval = ctx_lock(context, dbc, KRB5_LOCKMODE_EXCLUSIVE)))
         return retval;
 
+    /* initialize MS iprop context */
+    retval = krb5_dbinc_init_ctx(&ictx, context, dbc->db_name);
+    if (retval)
+        goto cleanup;
+
     db = dbc->db;
 
     retval = krb5_encode_princ_entry(context, &contdata, entry);
     if (retval)
         goto cleanup;
+
+    /* write MS iprop log */
+    retval = krb5_dbinc_make_entry(&ictx, KRB5_DBINC_PUT, &contdata);
+    if (retval) {
+       goto cleanup;
+    }
+
     contents.data = contdata.data;
     contents.size = contdata.length;
     retval = krb5_encode_princ_dbkey(context, &keydata, entry->princ);
@@ -860,6 +873,7 @@ krb5_db2_put_principal(krb5_context context, krb5_db_entry *entry,
 cleanup:
     ctx_update_age(dbc);
     (void) krb5_db2_unlock(context); /* unlock database */
+    krb5_dbinc_release_ctx(&ictx);   /* unlock MS iprop */
     return (retval);
 }
 
@@ -873,6 +887,7 @@ krb5_db2_delete_principal(krb5_context context, krb5_const_principal searchfor)
     DBT     key, contents;
     krb5_data keydata, contdata;
     int     i, dbret;
+    krb5_dbinc_ctx ictx;
 
     if (!inited(context))
         return KRB5_KDB_DBNOTINITED;
@@ -881,8 +896,18 @@ krb5_db2_delete_principal(krb5_context context, krb5_const_principal searchfor)
     if ((retval = ctx_lock(context, dbc, KRB5_LOCKMODE_EXCLUSIVE)))
         return (retval);
 
+    /* get MS iprop lock */
+    if ((retval = krb5_dbinc_init_ctx(&ictx, context, dbc->db_name))) {
+	goto cleanup;
+    }
+
     if ((retval = krb5_encode_princ_dbkey(context, &keydata, searchfor)))
         goto cleanup;
+
+    /* wite MS iprop log */
+    if ((retval = krb5_dbinc_make_entry(&ictx, KRB5_DBINC_DEL, &keydata)))
+        goto cleankey;
+
     key.data = keydata.data;
     key.size = keydata.length;
 
@@ -933,6 +958,7 @@ cleankey:
 cleanup:
     ctx_update_age(dbc);
     (void) krb5_db2_unlock(context); /* unlock write lock */
+    krb5_dbinc_release_ctx(&ictx);   /* unlock MS iprop   */
     return retval;
 }
 

@@ -63,6 +63,7 @@
 #include <utime.h>
 #include "kdb5.h"
 #include "kdb_db2.h"
+#include "kdb_incr.h"
 #include "kdb_xdr.h"
 #include "policy_db.h"
 

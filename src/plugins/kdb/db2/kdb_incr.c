@@ -12,7 +12,9 @@
 
 #include "k5-int.h"
 #include <stdio.h>
-
+#include "kdb.h"
+#include "kdb_incr.h"
+#include "kdb_xdr.h"
 #include <syslog.h>
 
 /*
@@ -36,24 +38,11 @@ static char *gen_dbsuffix(const char *db_name, char *sfx)
 krb5_error_code krb5_dbinc_init_ctx(krb5_dbinc_ctx *ictx, krb5_context ctx, 
 				    const char *db_name)
 {
-  krb5_error_code retval;
-
   ictx->ctx = ctx;
   ictx->db_name = db_name;
   if (db_name == NULL)
       return EINVAL;
 
-  ictx->db_initted = 0;
-  retval = krb5_db_set_name(ctx, db_name);
-  if (retval && retval != KRB5_KDB_DBINITED)
-      return retval;
-  if (retval == 0)
-      ictx->db_initted = 1;
-
-  retval = krb5_db_init(ctx);
-  if (retval && retval != KRB5_KDB_DBINITED)
-      return retval;
-  
   ictx->journal_name = gen_dbsuffix(db_name, ".journal");
   ictx->dvn_name = gen_dbsuffix(ictx->journal_name, "/version");
   ictx->lock_name = gen_dbsuffix(ictx->journal_name, "/lock");
@@ -73,8 +62,6 @@ krb5_error_code krb5_dbinc_init_ctx(krb5_dbinc_ctx *ictx, krb5_context ctx,
 
 void krb5_dbinc_release_ctx(krb5_dbinc_ctx *ictx)
 {
-  if (ictx->db_initted)
-      (void) krb5_db_fini(ictx->ctx);
   free(ictx->journal_name);
   free(ictx->dvn_name);
   free(ictx->lock_name);
@@ -106,8 +93,8 @@ krb5_error_code krb5_dbinc_init_journal(krb5_dbinc_ctx *ctx)
     /*
       Lock the journal, failing immediately if we can't.
     */
-    if (retval = krb5_dbinc_lock_journal(ctx, (KRB5_LOCKMODE_EXCLUSIVE|
-					       KRB5_LOCKMODE_DONTBLOCK)))
+    if ((retval = krb5_dbinc_lock_journal(ctx, (KRB5_LOCKMODE_EXCLUSIVE|
+					       KRB5_LOCKMODE_DONTBLOCK))))
 	return retval;
 
     /*
@@ -138,7 +125,7 @@ krb5_error_code krb5_dbinc_destroy_journal(krb5_dbinc_ctx *ctx)
     struct dirent *dp;
     char buf[1024]; /* big enough for any files we expect to be there */
     
-    if (retval = krb5_dbinc_lock_journal(ctx, KRB5_LOCKMODE_EXCLUSIVE))
+    if ((retval = krb5_dbinc_lock_journal(ctx, KRB5_LOCKMODE_EXCLUSIVE)))
 	return retval;
 
     dir = opendir(ctx->journal_name);
@@ -171,7 +158,7 @@ krb5_error_code krb5_dbinc_destroy_journal(krb5_dbinc_ctx *ctx)
 	closedir(dir);
     dir = NULL;
 
-    if (retval = krb5_dbinc_lock_journal(ctx, KRB5_LOCKMODE_UNLOCK))
+    if ((retval = krb5_dbinc_lock_journal(ctx, KRB5_LOCKMODE_UNLOCK)))
 	return retval;
     if (unlink(ctx->lock_name) < 0 ||
 	rmdir(ctx->journal_name) < 0)	
@@ -422,14 +409,12 @@ krb5_error_code krb5_dbinc_get_entry_from_db(krb5_dbinc_ctx *ctx,
 					     krb5_data *new_entry)
 {
     krb5_error_code retval;
-    krb5_db_entry db_entry, *db_entryp = NULL;
-    krb5_db_entry db_entry_journal, *db_entry_journalp = NULL;
+    krb5_db_entry *dbentry = NULL;
     krb5_principal princ = NULL;
     krb5_data data;
     krb5_data encoded_entry;
     krb5_data dbkey;
     int one = 1;
-    krb5_boolean more;
     char cmd[4];
     unsigned int len;
     int slen, ofs;
@@ -444,7 +429,7 @@ krb5_error_code krb5_dbinc_get_entry_from_db(krb5_dbinc_ctx *ctx,
 
     /* Parse dbinc entry */
     if (sscanf(entry->data, "%4s %u %n", cmd, &len, &ofs) != 2)
-	return EINVAL; /* need my own error codes */
+       return EINVAL; /* need my own error codes */
 
     /*
      * 'data' refers to the {encoded KDB entry, or encoded KDB lookup
@@ -454,7 +439,7 @@ krb5_error_code krb5_dbinc_get_entry_from_db(krb5_dbinc_ctx *ctx,
     data.data = entry->data + ofs;
 
     if (strcmp(cmd, "put") != 0 && strcmp(cmd, "del") != 0)
-	return EINVAL;
+       return EINVAL;
 
     /*
      * The common case will be a "put", in which case we need to decode
@@ -465,27 +450,30 @@ krb5_error_code krb5_dbinc_get_entry_from_db(krb5_dbinc_ctx *ctx,
 
     /* Get the principal name from the entry */
     if (strcmp(cmd, "del") == 0) {
-	/* data.data *is* null-terminated in this case */
-	retval = krb5_parse_name(ctx->ctx, data.data, &princ);
-	if (retval)
-	    return retval;
+       /* data.data *is* null-terminated in this case */
+       retval = krb5_parse_name(ctx->ctx, data.data, &princ);
+       if (retval)
+           return retval;
     } else if (strcmp(cmd, "put") == 0) {
-	/* data.data is an encoded KDB entry; decode */
-	retval = krb5_decode_princ_contents(ctx->ctx, &data, &db_entry_journal);
-	if (retval != 0)
-	    goto cleanup;
-	db_entry_journalp = &db_entry_journal;
-	retval = krb5_copy_principal(ctx->ctx, db_entry_journal.princ, &princ);
+       /* data.data is an encoded KDB entry; decode */
+       retval = krb5_decode_princ_entry(ctx->ctx, &data, &dbentry);
+       if (retval != 0)
+           goto cleanup;
+	retval = krb5_copy_principal(ctx->ctx, dbentry->princ, &princ);
 	if (retval != 0)
 	    goto cleanup;
     }
 
     /* Lookup the current KDB entry for the affected princ */
-    retval = krb5_db_get_principal(ctx->ctx, princ, &db_entry, &one, &more);
-    if (retval == 0 && one == 1)
-	db_entryp = &db_entry;
-    if (retval != 0 || (one != 0 && one != 1))
+    retval = krb5_db_get_principal(ctx->ctx, princ, 0, &dbentry);
+
+    /* in case of an unrecoverable error */
+    if (retval != 0 || retval != KRB5_KDB_NOENTRY)
 	goto cleanup;
+
+    /* mimic the old nentries behavior */
+    if (retval == KRB5_KDB_NOENTRY)
+	one = 0;
 
     /* If the log entry was a "del" and the princ doesn't exist, we're done */
     if (strcmp(cmd, "del") == 0 && one == 0)
@@ -498,12 +486,12 @@ krb5_error_code krb5_dbinc_get_entry_from_db(krb5_dbinc_ctx *ctx,
 	 *
 	 * (What a waste!  krb5_db_get_principal will have called
 	 * krb5_decode_princ_contents() just so we can call
-	 * krb5_encode_princ_contents() on the result.  We could add a
+	 * krb5_encode_princ_entry() on the result.  We could add a
 	 * krb5_db_get_principal_decoded() function, but, should we
 	 * bother?)
 	 */
-	retval = krb5_encode_princ_contents(ctx->ctx, &encoded_entry,
-					    &db_entry);
+	retval = krb5_encode_princ_entry(ctx->ctx, &encoded_entry,
+					    dbentry);
 	if (retval)
 	    goto cleanup;
 	/* If nothing changes, we're done (a minor optimization) */
@@ -545,14 +533,12 @@ cleanup:
     krb5_free_principal(ctx->ctx, princ);
 
     /*
-     * krb5_dbe_free_contents() ought to check that its arg is NULL
+     * krb5_dbe_free() ought to check that its arg is NULL
      * and bail early if so, like the other krb5_free*()s, so we
      * don't have to here.
      */
-    if (db_entry_journalp != NULL)
-	krb5_dbe_free_contents(ctx->ctx, db_entry_journalp);
-    if (db_entryp != NULL)
-	krb5_dbe_free_contents(ctx->ctx, db_entryp);
+    if (dbentry != NULL)
+	krb5_dbe_free(ctx->ctx, dbentry);
 
     if (retval) {
 	free(new_entry->data);
@@ -661,12 +647,12 @@ krb5_error_code krb5_dbinc_get_entry(krb5_dbinc_ctx *ctx, krb5_ui_4 dvn,
 
 krb5_error_code krb5_dbinc_apply_entry(krb5_dbinc_ctx *ctx, krb5_data *entry)
 {
-    krb5_db_entry dbentry;
+    krb5_db_entry *dbentry = NULL;
     krb5_principal principal;
     krb5_error_code retval;
     krb5_data data;
     char cmd[4];
-    int ofs, one = 1;
+    int ofs;
     unsigned int len;
 
     if (sscanf(entry->data, "%4s %u %n", cmd, &len, &ofs) != 2) {
@@ -678,15 +664,15 @@ krb5_error_code krb5_dbinc_apply_entry(krb5_dbinc_ctx *ctx, krb5_data *entry)
     data.data = entry->data + ofs;
 
     if (strcmp(cmd, "put") == 0) {
-	retval = krb5_decode_princ_contents(ctx->ctx, &data, &dbentry);
+	retval = krb5_decode_princ_entry(ctx->ctx, &data, &dbentry);
 	if (retval != 0) {
 	    syslog(LOG_NOTICE, "Failed to parse iprop journal dbentry from "
 		   "master (%d)", retval);
 	    return retval;
 	}
-	retval = krb5_db_put_principal(ctx->ctx, &dbentry, &one);
-	krb5_dbe_free_contents(ctx->ctx, &dbentry);
-	if (retval != 0 || one != 1) {
+	retval = krb5_db_put_principal(ctx->ctx, dbentry);
+	krb5_dbe_free(ctx->ctx, dbentry);
+	if (retval != 0) {
 	    syslog(LOG_NOTICE, "Failed to put a record into the KDB (%d)",
 		   retval);
 	    return retval;
@@ -699,7 +685,7 @@ krb5_error_code krb5_dbinc_apply_entry(krb5_dbinc_ctx *ctx, krb5_data *entry)
 		   "master (%d)", retval);
 	    return retval;
 	}
-	retval = krb5_db_delete_principal(ctx->ctx, principal, &one);
+	retval = krb5_db_delete_principal(ctx->ctx, principal);
 	krb5_free_principal(ctx->ctx, principal);
 	if (retval == KRB5_KDB_NOENTRY)
 	    retval = 0;

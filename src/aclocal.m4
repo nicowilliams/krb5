@@ -1665,13 +1665,14 @@ dnl  AC_MSG_NOTICE(disabling ldap backend module support)
 fi
 ])dnl
 dnl
-dnl If libkeyutils exists (on Linux) include it and use keyring ccache
-AC_DEFUN(KRB5_AC_KEYRING_CCACHE,[
-  AC_CHECK_HEADERS([keyutils.h],
-    AC_CHECK_LIB(keyutils, add_key, 
-      [dnl Pre-reqs were found
-       AC_DEFINE(USE_KEYRING_CCACHE, 1, [Define if the keyring ccache should be enabled])
-       LIBS="-lkeyutils $LIBS"
-      ]))
-])dnl
+dnl COMMENTED OUT BECAUSE RH DOES NOT SHIP 32-BIT keyutils IN 64-BIT RELEASES
+dnl dnl If libkeyutils exists (on Linux) include it and use keyring ccache
+dnl AC_DEFUN(KRB5_AC_KEYRING_CCACHE,[
+dnl   AC_CHECK_HEADERS([keyutils.h],
+dnl     AC_CHECK_LIB(keyutils, add_key, 
+dnl       [dnl Pre-reqs were found
+dnl        AC_DEFINE(USE_KEYRING_CCACHE, 1, [Define if the keyring ccache should be enabled])
+dnl        LIBS="-lkeyutils $LIBS"
+dnl       ]))
+dnl ])dnl
 dnl

@@ -74,6 +74,8 @@ krb5_error_code krb5_dbinc_init_journal(krb5_dbinc_ctx *ctx)
     krb5_error_code retval;
     int fd;
     FILE *f;
+
+    memset(ctx, 0, sizeof(*ctx));
     
     /*
       Create the journal; fail if it exists.

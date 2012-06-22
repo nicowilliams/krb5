@@ -173,14 +173,90 @@ static void cleanup_key_data(context, count, data)
     krb5_db_free(context, data);
 }
 
+static kadm5_ret_t
+check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
+                              krb5_db_entry *kdb,
+                              int n_ks_tuple,
+                              krb5_key_salt_tuple *ks_tuple,
+                              int *new_n_ks_tuple,
+                              krb5_key_salt_tuple **new_ks_tuple)
+{
+    kadm5_ret_t ret;
+    char *keygen_enctypes;
+    int kg_n_ks_tuples = 0;
+    krb5_key_salt_tuple *kg_ks_tuples = NULL;
+    int i, k;
+    int allowed = 0;
+
+    *new_n_ks_tuple = 0;
+    *new_ks_tuple = NULL;
+
+    ret = krb5_dbe_get_string(handle->context, kdb, "keygen_enctypes",
+                              &keygen_enctypes);
+    if (ret)
+        return ret;
+
+    if (keygen_enctypes) {
+        ret = krb5_string_to_keysalts(keygen_enctypes,
+                                      ", \t",/* Tuple separators */
+                                      ":.-", /* Key/salt separators */
+                                      0,     /* No duplicates */
+                                      &kg_ks_tuples,
+                                      &kg_n_ks_tuples);
+        free(keygen_enctypes);
+        /* Malformed policy?  Let the admin know so they can fix it. */
+        if (ret)
+            return ret;
+
+        /* Have policy but no ks_tuple input?  Output the policy. */
+        if (n_ks_tuple == 0) {
+            *new_n_ks_tuple = kg_n_ks_tuples;
+            *new_ks_tuple = kg_ks_tuples;
+            return 0;
+        }
+    }
+
+    /* Check that the requested ks_tuple is within policy, if we have one. */
+    for (i = 0; i >= 0 && i < n_ks_tuple && kg_n_ks_tuples; i++, allowed = 0) {
+        for (k = 0; k >= 0 && k < kg_n_ks_tuples && !allowed; k++) {
+            if (ks_tuple[i].ks_enctype == kg_ks_tuples[k].ks_enctype)
+                allowed = 1;
+        }
+        if (!allowed) {
+            free(kg_ks_tuples);
+            return KRB5_KDB_BAD_ENCTYPE; /* Get a better error code? */
+        }
+    }
+
+    /*
+     * Output a copy of the input ks_tuples if we had any, else of
+     * supported_enctypes.  Has to be a copy so the caller can free it.
+     */
+    assert(n_ks_tuple != 0 || !*new_n_ks_tuple);
+    free(kg_ks_tuples);
+
+    if (n_ks_tuple == 0) {
+        /* Default to supported_enctypes */
+        n_ks_tuple = handle->params.num_keysalts;
+        ks_tuple = handle->params.keysalts;
+    }
+
+    *new_ks_tuple = malloc(n_ks_tuple * sizeof (**new_ks_tuple));
+    if (*new_ks_tuple == NULL)
+        return ENOMEM;
+    memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
+    *new_n_ks_tuple = n_ks_tuple;
+    return 0;
+}
+
+
 /*
  * Set *passptr to NULL if the request looks like the first part of a krb5 1.6
  * addprinc -randkey operation.  The krb5 1.6 dummy password for these requests
  * was invalid UTF-8, which runs afoul of the arcfour string-to-key.
  */
 static void
-check_1_6_dummy(kadm5_principal_ent_t entry, long mask,
-                int n_ks_tuple, krb5_key_salt_tuple *ks_tuple, char **passptr)
+check_1_6_dummy(kadm5_principal_ent_t entry, long mask, char **passptr)
 {
     int i;
     char *password = *passptr;
@@ -224,12 +300,14 @@ kadm5_create_principal_3(void *server_handle,
     kadm5_server_handle_t handle = server_handle;
     krb5_keyblock               *act_mkey;
     krb5_kvno                   act_kvno;
+    int                         new_n_ks_tuple = 0;
+    krb5_key_salt_tuple         *new_ks_tuple = NULL;
 
     CHECK_HANDLE(server_handle);
 
     krb5_clear_error_message(handle->context);
 
-    check_1_6_dummy(entry, mask, n_ks_tuple, ks_tuple, &password);
+    check_1_6_dummy(entry, mask, &password);
 
     /*
      * Argument sanity checking, and opening up the DB
@@ -246,12 +324,6 @@ kadm5_create_principal_3(void *server_handle,
         return KADM5_BAD_MASK;
     if (entry == NULL)
         return EINVAL;
-
-    /* Use default keysalts if caller did not provide any. */
-    if (n_ks_tuple == 0) {
-        ks_tuple = handle->params.keysalts;
-        n_ks_tuple = handle->params.num_keysalts;
-    }
 
     /*
      * Check to see if the principal exists
@@ -362,6 +434,16 @@ kadm5_create_principal_3(void *server_handle,
         }
     }
 
+    /*
+     * We need to have setup the TL data, so we have strings, so we can
+     * check enctype policy, which is why we check/initialize ks_tuple
+     * this late.
+     */
+    ret = check_and_set_ks_tuple_policy(handle, kdb, n_ks_tuple, ks_tuple,
+                                        &new_n_ks_tuple, &new_ks_tuple);
+    if (ret)
+        goto cleanup;
+
     /* initialize the keys */
 
     ret = krb5_dbe_find_act_mkey(handle->context, active_mkey_list, &act_kvno,
@@ -370,13 +452,14 @@ kadm5_create_principal_3(void *server_handle,
         goto cleanup;
 
     if (password) {
-        ret = krb5_dbe_cpw(handle->context, act_mkey, ks_tuple, n_ks_tuple,
-                           password, (mask & KADM5_KVNO)?entry->kvno:1,
+        ret = krb5_dbe_cpw(handle->context, act_mkey, new_ks_tuple,
+                           new_n_ks_tuple, password,
+                           (mask & KADM5_KVNO)?entry->kvno:1,
                            FALSE, kdb);
     } else {
         /* Null password means create with random key (new in 1.8). */
         ret = krb5_dbe_crk(handle->context, &master_keyblock,
-                           ks_tuple, n_ks_tuple, FALSE, kdb);
+                           new_ks_tuple, new_n_ks_tuple, FALSE, kdb);
     }
     if (ret)
         goto cleanup;
@@ -388,7 +471,7 @@ kadm5_create_principal_3(void *server_handle,
 
     ret = k5_kadm5_hook_create(handle->context, handle->hook_handles,
                                KADM5_HOOK_STAGE_PRECOMMIT, entry, mask,
-                               n_ks_tuple, ks_tuple, password);
+                               new_n_ks_tuple, new_ks_tuple, password);
     if (ret)
         goto cleanup;
 
@@ -441,9 +524,10 @@ kadm5_create_principal_3(void *server_handle,
 
     (void) k5_kadm5_hook_create(handle->context, handle->hook_handles,
                                 KADM5_HOOK_STAGE_POSTCOMMIT, entry, mask,
-                                n_ks_tuple, ks_tuple, password);
+                                new_n_ks_tuple, new_ks_tuple, password);
 
 cleanup:
+    free(new_ks_tuple);
     krb5_db_free_principal(handle->context, kdb);
     if (have_polent)
         (void) kadm5_free_policy_ent(handle->lhandle, &polent);
@@ -1345,6 +1429,8 @@ kadm5_chpass_principal_3(void *server_handle,
     osa_pw_hist_ent             hist;
     krb5_keyblock               *act_mkey, *hist_keyblocks = NULL;
     krb5_kvno                   act_kvno, hist_kvno;
+    int                         new_n_ks_tuple = 0;
+    krb5_key_salt_tuple         *new_ks_tuple = NULL;
 
     CHECK_HANDLE(server_handle);
 
@@ -1359,14 +1445,13 @@ kadm5_chpass_principal_3(void *server_handle,
                                 principal, hist_princ)) == TRUE)
         return KADM5_PROTECT_PRINCIPAL;
 
-    /* Use default keysalts if caller did not provide any. */
-    if (n_ks_tuple == 0) {
-        ks_tuple = handle->params.keysalts;
-        n_ks_tuple = handle->params.num_keysalts;
-    }
-
     if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
         return(ret);
+
+    ret = check_and_set_ks_tuple_policy(handle, kdb, n_ks_tuple, ks_tuple,
+                                        &new_n_ks_tuple, &new_ks_tuple);
+    if (ret)
+        goto done;
 
     if ((adb.aux_attributes & KADM5_POLICY)) {
         if ((ret = kadm5_get_policy(handle->lhandle, adb.policy, &pol)))
@@ -1392,7 +1477,7 @@ kadm5_chpass_principal_3(void *server_handle,
     if (ret)
         goto done;
 
-    ret = krb5_dbe_cpw(handle->context, act_mkey, ks_tuple, n_ks_tuple,
+    ret = krb5_dbe_cpw(handle->context, act_mkey, new_ks_tuple, new_n_ks_tuple,
                        password, 0 /* increment kvno */,
                        keepold, kdb);
     if (ret)
@@ -1504,7 +1589,7 @@ kadm5_chpass_principal_3(void *server_handle,
 
     ret = k5_kadm5_hook_chpass(handle->context, handle->hook_handles,
                                KADM5_HOOK_STAGE_PRECOMMIT, principal, keepold,
-                               n_ks_tuple, ks_tuple, password);
+                               new_n_ks_tuple, new_ks_tuple, password);
     if (ret)
         goto done;
 
@@ -1513,9 +1598,10 @@ kadm5_chpass_principal_3(void *server_handle,
 
     (void) k5_kadm5_hook_chpass(handle->context, handle->hook_handles,
                                 KADM5_HOOK_STAGE_POSTCOMMIT, principal,
-                                keepold, n_ks_tuple, ks_tuple, password);
+                                keepold, new_n_ks_tuple, new_ks_tuple, password);
     ret = KADM5_OK;
 done:
+    free(new_ks_tuple);
     if (!hist_added && hist.key_data)
         free_history_entry(handle->context, &hist);
     kdb_free_entry(handle, kdb, &adb);
@@ -1554,17 +1640,13 @@ kadm5_randkey_principal_3(void *server_handle,
     int                         ret, last_pwd, have_pol = 0;
     kadm5_server_handle_t       handle = server_handle;
     krb5_keyblock               *act_mkey;
+    int                         new_n_ks_tuple = 0;
+    krb5_key_salt_tuple         *new_ks_tuple = NULL;
 
     if (keyblocks)
         *keyblocks = NULL;
 
     CHECK_HANDLE(server_handle);
-
-    /* Use default keysalts if caller did not provide any. */
-    if (n_ks_tuple == 0) {
-        ks_tuple = handle->params.keysalts;
-        n_ks_tuple = handle->params.num_keysalts;
-    }
 
     krb5_clear_error_message(handle->context);
 
@@ -1581,12 +1663,17 @@ kadm5_randkey_principal_3(void *server_handle,
     if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
         return(ret);
 
+    ret = check_and_set_ks_tuple_policy(handle, kdb, n_ks_tuple, ks_tuple,
+                                        &new_n_ks_tuple, &new_ks_tuple);
+    if (ret)
+        goto done;
+
     ret = krb5_dbe_find_act_mkey(handle->context, active_mkey_list, NULL,
                                  &act_mkey);
     if (ret)
         goto done;
 
-    ret = krb5_dbe_crk(handle->context, act_mkey, ks_tuple, n_ks_tuple,
+    ret = krb5_dbe_crk(handle->context, act_mkey, new_ks_tuple, new_n_ks_tuple,
                        keepold, kdb);
     if (ret)
         goto done;
@@ -1650,7 +1737,7 @@ kadm5_randkey_principal_3(void *server_handle,
 
     ret = k5_kadm5_hook_chpass(handle->context, handle->hook_handles,
                                KADM5_HOOK_STAGE_PRECOMMIT, principal, keepold,
-                               n_ks_tuple, ks_tuple, NULL);
+                               new_n_ks_tuple, new_ks_tuple, NULL);
     if (ret)
         goto done;
     if ((ret = kdb_put_entry(handle, kdb, &adb)))
@@ -1658,9 +1745,10 @@ kadm5_randkey_principal_3(void *server_handle,
 
     (void) k5_kadm5_hook_chpass(handle->context, handle->hook_handles,
                                 KADM5_HOOK_STAGE_POSTCOMMIT, principal,
-                                keepold, n_ks_tuple, ks_tuple, NULL);
+                                keepold, new_n_ks_tuple, new_ks_tuple, NULL);
     ret = KADM5_OK;
 done:
+    free(new_ks_tuple);
     kdb_free_entry(handle, kdb, &adb);
     if (have_pol)
         kadm5_free_policy_ent(handle->lhandle, &pol);
@@ -1862,6 +1950,8 @@ kadm5_setkey_principal_3(void *server_handle,
     krb5_key_data         tmp_key_data;
     krb5_key_data        *tptr;
     krb5_keyblock               *act_mkey;
+    int                         new_n_ks_tuple = 0;
+    krb5_key_salt_tuple         *new_ks_tuple = NULL;
 
     CHECK_HANDLE(server_handle);
 
@@ -1874,6 +1964,14 @@ kadm5_setkey_principal_3(void *server_handle,
                                  principal, hist_princ)) == TRUE))
         return KADM5_PROTECT_PRINCIPAL;
 
+    if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
+        return(ret);
+
+    ret = check_and_set_ks_tuple_policy(handle, kdb, n_ks_tuple, ks_tuple,
+                                        &new_n_ks_tuple, &new_ks_tuple);
+    if (ret)
+        goto done;
+
     for (i = 0; i < n_keys; i++) {
         for (j = i+1; j < n_keys; j++) {
             if ((ret = krb5_c_enctype_compare(handle->context,
@@ -1882,20 +1980,24 @@ kadm5_setkey_principal_3(void *server_handle,
                                               &similar)))
                 return(ret);
             if (similar) {
-                if (n_ks_tuple) {
-                    if (ks_tuple[i].ks_salttype == ks_tuple[j].ks_salttype)
-                        return KADM5_SETKEY_DUP_ENCTYPES;
-                } else
-                    return KADM5_SETKEY_DUP_ENCTYPES;
+                if (new_n_ks_tuple) {
+                    if (new_ks_tuple[i].ks_salttype == new_ks_tuple[j].ks_salttype) {
+                        ret = KADM5_SETKEY_DUP_ENCTYPES;
+                        goto done;
+                    }
+                } else {
+                    ret = KADM5_SETKEY_DUP_ENCTYPES;
+                    goto done;
+                }
             }
         }
     }
+    /* Note: we don't want to refer to new_*ks_tuple from here */
 
-    if (n_ks_tuple && n_ks_tuple != n_keys)
-        return KADM5_SETKEY3_ETYPE_MISMATCH;
-
-    if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
-        return(ret);
+    if (n_ks_tuple && n_ks_tuple != n_keys) {
+        ret = KADM5_SETKEY3_ETYPE_MISMATCH;
+        goto done;
+    }
 
     for (kvno = 0, i=0; i<kdb->n_key_data; i++)
         if (kdb->key_data[i].key_data_kvno > kvno)
@@ -2033,6 +2135,7 @@ kadm5_setkey_principal_3(void *server_handle,
 
     ret = KADM5_OK;
 done:
+    free(new_ks_tuple);
     kdb_free_entry(handle, kdb, &adb);
     if (have_pol)
         kadm5_free_policy_ent(handle->lhandle, &pol);

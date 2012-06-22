@@ -609,6 +609,12 @@ modules.  The following string attributes are recognized by the KDC:
     :ref:`Encryption_and_salt_types` in :ref:`kdc.conf(5)` for a list
     of the accepted values.
 
+**keygen_enctypes**
+    Specifies the key/salt tuples supported for long-term keys when
+    setting or changing a principal's password/keys.  See
+    :ref:`Encryption_and_salt_types` in :ref:`kdc.conf(5)` for a list
+    of the accepted values.
+
 This command requires the **modify** privilege.
 
 Alias: **setstr**

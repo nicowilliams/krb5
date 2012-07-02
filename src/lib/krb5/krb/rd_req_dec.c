@@ -257,6 +257,7 @@ rd_req_decoded_opt(krb5_context context, krb5_auth_context *auth_context,
     krb5_enctype         *permitted_etypes = NULL;
     int                   permitted_etypes_len = 0;
     krb5_keyblock         decrypt_key;
+    int                   check_addrs = 1;
 
     decrypt_key.enctype = ENCTYPE_NULL;
     decrypt_key.contents = NULL;
@@ -301,7 +302,12 @@ rd_req_decoded_opt(krb5_context context, krb5_auth_context *auth_context,
         goto cleanup;
     }
 
-    if ((*auth_context)->remote_addr &&
+    if (krb5int_libdefault_boolean(context, &server->realm,
+                                   "check-ticket-addresses",
+                                   &check_addrs))
+        check_addrs = 0;
+
+    if (check_addrs && (*auth_context)->remote_addr &&
         !krb5_address_search(context, (*auth_context)->remote_addr,
                              req->ticket->enc_part2->caddrs)) {
         retval = KRB5KRB_AP_ERR_BADADDR;

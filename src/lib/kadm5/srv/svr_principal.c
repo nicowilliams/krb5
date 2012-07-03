@@ -183,8 +183,8 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
 {
     kadm5_ret_t ret;
     char *keygen_enctypes;
-    int kg_n_ks_tuples = 0;
-    krb5_key_salt_tuple *kg_ks_tuples = NULL;
+    int kg_n_ks_tuple = 0;
+    krb5_key_salt_tuple *kg_ks_tuple = NULL;
     int i, k;
     int allowed = 0;
 
@@ -201,8 +201,8 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
                                       ", \t",/* Tuple separators */
                                       ":.-", /* Key/salt separators */
                                       0,     /* No duplicates */
-                                      &kg_ks_tuples,
-                                      &kg_n_ks_tuples);
+                                      &kg_ks_tuple,
+                                      &kg_n_ks_tuple);
         free(keygen_enctypes);
         /* Malformed policy?  Let the admin know so they can fix it. */
         if (ret)
@@ -210,31 +210,68 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
 
         /* Have policy but no ks_tuple input?  Output the policy. */
         if (n_ks_tuple == 0) {
-            *new_n_ks_tuple = kg_n_ks_tuples;
-            *new_ks_tuple = kg_ks_tuples;
+            *new_n_ks_tuple = kg_n_ks_tuple;
+            *new_ks_tuple = kg_ks_tuple;
             return 0;
         }
     }
 
     /* Check that the requested ks_tuple is within policy, if we have one. */
-    for (i = 0; i >= 0 && i < n_ks_tuple && kg_n_ks_tuples; i++, allowed = 0) {
-        for (k = 0; k >= 0 && k < kg_n_ks_tuples && !allowed; k++) {
-            if (ks_tuple[i].ks_enctype == kg_ks_tuples[k].ks_enctype)
+    for (i = 0; i >= 0 && i < n_ks_tuple && kg_n_ks_tuple; i++, allowed = 0) {
+        for (k = 0; k >= 0 && k < kg_n_ks_tuple && !allowed; k++) {
+            if (ks_tuple[i].ks_enctype == kg_ks_tuple[k].ks_enctype)
                 allowed = 1;
         }
         if (!allowed) {
-            free(kg_ks_tuples);
-            return KRB5_KDB_BAD_ENCTYPE; /* Get a better error code? */
+            ret = KRB5_KDB_BAD_ENCTYPE; /* Get a better error code? */
+            goto out;
         }
     }
 
     /*
-     * Output a copy of the input ks_tuples if we had any, else of
+     * Now filter new_ks_tuple by ks_tuple so as to preserve the
+     * keygen_enctypes relative ordering, though we ignore the salt
+     * type in this filtering.
+     */
+    if (kg_n_ks_tuple) {
+        krb5_key_salt_tuple *kg_ks_tuple_subset;
+        int m;
+
+        kg_ks_tuple_subset = calloc(n_ks_tuple,
+                                     sizeof (*kg_ks_tuple_subset));
+        if (!kg_ks_tuple_subset) {
+            ret = ENOMEM;
+            goto out;
+        }
+        for (m = 0, i = 0;
+             i >= 0 && i < kg_n_ks_tuple && m < n_ks_tuple;
+             i++) {
+            for (k = 0; k < n_ks_tuple; k++) {
+                if (kg_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype &&
+                    kg_ks_tuple[i].ks_salttype == ks_tuple[k].ks_salttype)
+                    kg_ks_tuple_subset[m++] = kg_ks_tuple[i];
+            }
+        }
+        if (m < n_ks_tuple) {
+            /* Do it again, but this time ignore salttypes */
+            for (m = 0, i = 0;
+                 i >= 0 && i < kg_n_ks_tuple && m < n_ks_tuple;
+                 i++) {
+                for (k = 0; k < n_ks_tuple; k++) {
+                    if (kg_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype)
+                        kg_ks_tuple_subset[m++] = kg_ks_tuple[i];
+                }
+            }
+        }
+        free(kg_ks_tuple);
+        kg_ks_tuple = kg_ks_tuple_subset;
+        kg_n_ks_tuple = n_ks_tuple;
+    }
+
+    /*
+     * Output a copy of the input ks_tuple if we had any, else of
      * supported_enctypes.  Has to be a copy so the caller can free it.
      */
-    assert(n_ks_tuple != 0 || !*new_n_ks_tuple);
-    free(kg_ks_tuples);
-
     if (n_ks_tuple == 0) {
         /* Default to supported_enctypes */
         n_ks_tuple = handle->params.num_keysalts;
@@ -242,11 +279,20 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
     }
 
     *new_ks_tuple = malloc(n_ks_tuple * sizeof (**new_ks_tuple));
-    if (*new_ks_tuple == NULL)
-        return ENOMEM;
-    memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
+    if (*new_ks_tuple == NULL) {
+        ret = ENOMEM;
+        goto out;
+    }
+    if (kg_n_ks_tuple)
+        memcpy(*new_ks_tuple, kg_ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
+    else
+        memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
     *new_n_ks_tuple = n_ks_tuple;
-    return 0;
+    ret = 0;
+
+out:
+    free(kg_ks_tuple);
+    return ret;
 }
 
 

@@ -302,6 +302,10 @@ rd_req_decoded_opt(krb5_context context, krb5_auth_context *auth_context,
         goto cleanup;
     }
 
+    if (!server) {
+        server = req->ticket->server;
+    }
+
     if (krb5int_libdefault_boolean(context, &server->realm,
                                    "check-ticket-addresses",
                                    &check_addrs))
@@ -314,9 +318,6 @@ rd_req_decoded_opt(krb5_context context, krb5_auth_context *auth_context,
         goto cleanup;
     }
 
-    if (!server) {
-        server = req->ticket->server;
-    }
     /* Get an rcache if necessary. */
     if (((*auth_context)->rcache == NULL)
         && ((*auth_context)->auth_context_flags & KRB5_AUTH_CONTEXT_DO_TIME)

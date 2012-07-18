@@ -645,6 +645,14 @@ add_policy
                      sets the duration for which the principal is locked from authenticating if too many authentication failures occur without
                      the specified failure count interval elapsing.
 
+              **-allowedkeysalts**
+                  Specifies the key/salt tuples supported for long-term keys when
+                  setting or changing a principal's password/keys.  See
+                  :ref:`Encryption_and_salt_types` in :ref:`kdc.conf(5)` for a list
+                  of the accepted values, but note that key/salt tuples must be
+                  separated with commas (',') only.  To clear the allowed key/salt
+                  policy use a value of '-'.
+
 
               EXAMPLES::
 

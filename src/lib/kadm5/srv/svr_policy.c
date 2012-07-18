@@ -138,7 +138,33 @@ kadm5_create_policy_internal(void *server_handle,
     else
         pent.policy_refcnt = entry->policy_refcnt;
 
-    if (handle->api_version == KADM5_API_VERSION_3) {
+    if (handle->api_version == KADM5_API_VERSION_4) {
+        if (!(mask & KADM5_POLICY_ATTRIBUTES))
+            pent.attributes = 0;
+        else
+            pent.attributes = entry->attributes;
+        if (!(mask & KADM5_POLICY_MAX_LIFE))
+            pent.max_life = 0;
+        else
+            pent.max_life = entry->max_life;
+        if (!(mask & KADM5_POLICY_MAX_RLIFE))
+            pent.max_renewable_life = 0;
+        else
+            pent.max_renewable_life = entry->max_renewable_life;
+        if (!(mask & KADM5_POLICY_KEYGEN_ENCTYPES))
+            pent.keygen_enctypes = 0;
+        else
+            pent.keygen_enctypes = entry->keygen_enctypes;
+        if (!(mask & KADM5_POLICY_TL_DATA)) {
+            pent.n_tl_data = 0;
+            pent.tl_data = NULL;
+        } else {
+            pent.n_tl_data = entry->n_tl_data;
+            pent.tl_data = entry->tl_data;
+        }
+    }
+    if (handle->api_version == KADM5_API_VERSION_3 ||
+        handle->api_version == KADM5_API_VERSION_4) {
         if (!(mask & KADM5_PW_MAX_FAILURE))
             pent.pw_max_fail = 0;
         else
@@ -151,10 +177,16 @@ kadm5_create_policy_internal(void *server_handle,
             pent.pw_lockout_duration = 0;
         else
             pent.pw_lockout_duration = entry->pw_lockout_duration;
-    } else {
+    }
+    if (handle->api_version == KADM5_API_VERSION_2) {
         pent.pw_max_fail = 0;
         pent.pw_failcnt_interval = 0;
         pent.pw_lockout_duration = 0;
+        pent.attributes = 0;
+        pent.max_life = 0;
+        pent.max_renewable_life = 0;
+        pent.n_tl_data = 0;
+        pent.tl_data = 0;
     }
 
     if ((ret = krb5_db_create_policy(handle->context, &pent)))
@@ -265,7 +297,8 @@ kadm5_modify_policy_internal(void *server_handle,
     }
     if ((mask & KADM5_REF_COUNT))
         p->policy_refcnt = entry->policy_refcnt;
-    if (handle->api_version == KADM5_API_VERSION_3) {
+    if (handle->api_version == KADM5_API_VERSION_3 ||
+        handle->api_version == KADM5_API_VERSION_4) {
         if ((mask & KADM5_PW_MAX_FAILURE))
             p->pw_max_fail = entry->pw_max_fail;
         if ((mask & KADM5_PW_FAILURE_COUNT_INTERVAL))
@@ -273,7 +306,24 @@ kadm5_modify_policy_internal(void *server_handle,
         if ((mask & KADM5_PW_LOCKOUT_DURATION))
             p->pw_lockout_duration = entry->pw_lockout_duration;
     }
+    if (handle->api_version == KADM5_API_VERSION_4) {
+        if ((mask & KADM5_POLICY_ATTRIBUTES))
+            p->attributes = entry->attributes;
+        if ((mask & KADM5_POLICY_MAX_LIFE))
+            p->max_life = entry->max_life;
+        if ((mask & KADM5_POLICY_MAX_RLIFE))
+            p->max_renewable_life = entry->max_renewable_life;
+        if ((mask & KADM5_POLICY_KEYGEN_ENCTYPES))
+            p->keygen_enctypes = entry->keygen_enctypes;
+        if ((mask & KADM5_POLICY_TL_DATA)) {
+            p->n_tl_data = entry->n_tl_data;
+            p->tl_data = entry->tl_data;
+        }
+    }
     ret = krb5_db_put_policy(handle->context, p);
+    p->keygen_enctypes = NULL;
+    p->n_tl_data = 0;
+    p->tl_data = NULL;
     krb5_db_free_policy(handle->context, p);
     return ret;
 }
@@ -283,7 +333,7 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
                  kadm5_policy_ent_t entry)
 {
     osa_policy_ent_t            t;
-    int                         ret;
+    kadm5_ret_t                 ret;
     kadm5_server_handle_t handle = server_handle;
 
     CHECK_HANDLE(server_handle);
@@ -292,7 +342,7 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
 
     if (name == (kadm5_policy_t) NULL)
         return EINVAL;
-    if(strlen(name) == 0)
+    if (strlen(name) == 0)
         return KADM5_BAD_POLICY;
     ret = krb5_db_get_policy(handle->context, name, &t);
     if (ret == KRB5_KDB_NOENTRY)
@@ -301,8 +351,8 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
         return ret;
 
     if ((entry->policy = strdup(t->name)) == NULL) {
-        krb5_db_free_policy(handle->context, t);
-        return ENOMEM;
+        ret = ENOMEM;
+        goto cleanup;
     }
     entry->pw_min_life = t->pw_min_life;
     entry->pw_max_life = t->pw_max_life;
@@ -310,12 +360,34 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
     entry->pw_min_classes = t->pw_min_classes;
     entry->pw_history_num = t->pw_history_num;
     entry->policy_refcnt = t->policy_refcnt;
-    if (handle->api_version == KADM5_API_VERSION_3) {
+    if (handle->api_version == KADM5_API_VERSION_3 ||
+        handle->api_version == KADM5_API_VERSION_4) {
         entry->pw_max_fail = t->pw_max_fail;
         entry->pw_failcnt_interval = t->pw_failcnt_interval;
         entry->pw_lockout_duration = t->pw_lockout_duration;
     }
-    krb5_db_free_policy(handle->context, t);
+    if (handle->api_version == KADM5_API_VERSION_4) {
+        entry->attributes = t->attributes;
+        entry->max_life = t->max_life;
+        entry->max_renewable_life = t->max_renewable_life;
+        if (t->keygen_enctypes) {
+            entry->keygen_enctypes = strdup(t->keygen_enctypes);
+            if (!entry->keygen_enctypes) {
+                ret = ENOMEM;
+                goto cleanup;
+            }
+        }
+        entry->n_tl_data = t->n_tl_data;
+        entry->tl_data = t->tl_data;
+    }
 
+    ret = 0;
+
+cleanup:
+    if (ret) {
+        free(entry->keygen_enctypes);
+        free(entry->policy);
+    }
+    krb5_db_free_policy(handle->context, t);
     return KADM5_OK;
 }

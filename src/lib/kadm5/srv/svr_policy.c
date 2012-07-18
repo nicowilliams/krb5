@@ -138,7 +138,29 @@ kadm5_create_policy_internal(void *server_handle,
     else
         pent.policy_refcnt = entry->policy_refcnt;
 
-    if (handle->api_version == KADM5_API_VERSION_3) {
+    if (handle->api_version == KADM5_API_VERSION_4) {
+        if (!(mask & KADM5_POLICY_ATTRIBUTES))
+            pent.attributes = 0;
+        else
+            pent.attributes = entry->attributes;
+        if (!(mask & KADM5_POLICY_MAX_LIFE))
+            pent.max_life = 0;
+        else
+            pent.max_life = entry->max_life;
+        if (!(mask & KADM5_POLICY_MAX_RLIFE))
+            pent.max_renewable_life = 0;
+        else
+            pent.max_renewable_life = entry->max_renewable_life;
+        if (!(mask & KADM5_POLICY_TL_DATA)) {
+            pent.n_tl_data = 0;
+            pent.tl_data = NULL;
+        } else {
+            pent.n_tl_data = entry->n_tl_data;
+            pent.tl_data = entry->tl_data;
+        }
+    }
+    if (handle->api_version == KADM5_API_VERSION_3 ||
+        handle->api_version == KADM5_API_VERSION_4) {
         if (!(mask & KADM5_PW_MAX_FAILURE))
             pent.pw_max_fail = 0;
         else
@@ -151,10 +173,16 @@ kadm5_create_policy_internal(void *server_handle,
             pent.pw_lockout_duration = 0;
         else
             pent.pw_lockout_duration = entry->pw_lockout_duration;
-    } else {
+    }
+    if (handle->api_version == KADM5_API_VERSION_2) {
         pent.pw_max_fail = 0;
         pent.pw_failcnt_interval = 0;
         pent.pw_lockout_duration = 0;
+        pent.attributes = 0;
+        pent.max_life = 0;
+        pent.max_renewable_life = 0;
+        pent.n_tl_data = 0;
+        pent.tl_data = 0;
     }
 
     if ((ret = krb5_db_create_policy(handle->context, &pent)))
@@ -314,6 +342,13 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
         entry->pw_max_fail = t->pw_max_fail;
         entry->pw_failcnt_interval = t->pw_failcnt_interval;
         entry->pw_lockout_duration = t->pw_lockout_duration;
+    }
+    if (handle->api_version == KADM5_API_VERSION_4) {
+        entry->attributes = t->attributes;
+        entry->max_life = t->max_life;
+        entry->max_renewable_life = t->max_renewable_life;
+        entry->n_tl_data = t->n_tl_data;
+        entry->tl_data = t->tl_data;
     }
     krb5_db_free_policy(handle->context, t);
 

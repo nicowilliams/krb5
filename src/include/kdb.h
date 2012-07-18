@@ -220,6 +220,12 @@ typedef struct _osa_policy_ent_t {
     krb5_ui_4       pw_max_fail;                /* pwdMaxFailure */
     krb5_ui_4       pw_failcnt_interval;        /* pwdFailureCountInterval */
     krb5_ui_4       pw_lockout_duration;        /* pwdLockoutDuration */
+    /* Only valid if version > 2 */
+    krb5_ui_4       attributes;
+    krb5_ui_4       max_life;
+    krb5_ui_4       max_renewable_life;
+    krb5_int16      n_tl_data;
+    krb5_tl_data  * tl_data;
 } osa_policy_ent_rec, *osa_policy_ent_t;
 
 typedef       void    (*osa_adb_iter_policy_func) (void *, osa_policy_ent_t);

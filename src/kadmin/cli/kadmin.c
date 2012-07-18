@@ -489,13 +489,13 @@ kadmin_startup(int argc, char *argv[])
                  "credentials.\n"), princstr);
         retval = kadm5_init_with_creds(context, princstr, cc, svcname, &params,
                                        KADM5_STRUCT_VERSION,
-                                       KADM5_API_VERSION_3, db_args, &handle);
+                                       KADM5_API_VERSION_4, db_args, &handle);
     } else if (use_anonymous) {
         printf(_("Authenticating as principal %s with password; "
                  "anonymous requested.\n"), princstr);
         retval = kadm5_init_anonymous(context, princstr, svcname, &params,
                                       KADM5_STRUCT_VERSION,
-                                      KADM5_API_VERSION_3, db_args, &handle);
+                                      KADM5_API_VERSION_4, db_args, &handle);
     } else if (use_keytab) {
         if (keytab_name)
             printf(_("Authenticating as principal %s with keytab %s.\n"),
@@ -505,13 +505,13 @@ kadmin_startup(int argc, char *argv[])
                    princstr);
         retval = kadm5_init_with_skey(context, princstr, keytab_name, svcname,
                                       &params, KADM5_STRUCT_VERSION,
-                                      KADM5_API_VERSION_3, db_args, &handle);
+                                      KADM5_API_VERSION_4, db_args, &handle);
     } else {
         printf(_("Authenticating as principal %s with password.\n"),
                princstr);
         retval = kadm5_init_with_password(context, princstr, password, svcname,
                                           &params, KADM5_STRUCT_VERSION,
-                                          KADM5_API_VERSION_3, db_args,
+                                          KADM5_API_VERSION_4, db_args,
                                           &handle);
     }
     if (retval) {

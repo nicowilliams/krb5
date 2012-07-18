@@ -94,6 +94,7 @@ static krb5_error_code dump_ov_princ (krb5_pointer,
                                       krb5_db_entry *);
 static void dump_k5beta7_policy (void *, osa_policy_ent_t);
 static void dump_r1_8_policy (void *, osa_policy_ent_t);
+static void dump_r1_11_policy (void *, osa_policy_ent_t);
 
 typedef krb5_error_code (*dump_func)(krb5_pointer,
                                      krb5_db_entry *);
@@ -105,6 +106,8 @@ static int process_k5beta6_record (char *, krb5_context,
 static int process_k5beta7_record (char *, krb5_context,
                                    FILE *, int, int *);
 static int process_r1_8_record (char *, krb5_context,
+                                FILE *, int, int *);
+static int process_r1_11_record (char *, krb5_context,
                                 FILE *, int, int *);
 static int process_ov_record (char *, krb5_context,
                               FILE *, int, int *);
@@ -185,14 +188,23 @@ dump_version r1_8_version = {
     dump_r1_8_policy,
     process_r1_8_record,
 };
+dump_version r1_11_version = {
+    "Kerberos version 5 release 1.11",
+    "kdb5_util load_dump version 6\n",
+    0,
+    0,
+    dump_k5beta7_princ_withpolicy,
+    dump_r1_11_policy,
+    process_r1_11_record,
+};
 dump_version ipropx_1_version = {
     "Kerberos iprop extensible version",
     "ipropx",
     0,
     0,
     dump_k5beta7_princ_withpolicy,
-    dump_r1_8_policy,
-    process_r1_8_record,
+    dump_r1_11_policy,
+    process_r1_11_record,
 };
 
 /* External data */
@@ -267,6 +279,7 @@ static const char updateoption[] = "-update";
 static const char hashoption[] = "-hash";
 static const char ovoption[] = "-ov";
 static const char r13option[] = "-r13";
+static const char r18option[] = "-r18";
 static const char dump_tmptrail[] = "~";
 
 /*
@@ -948,6 +961,39 @@ void dump_r1_8_policy(void *data, osa_policy_ent_t entry)
             entry->pw_failcnt_interval, entry->pw_lockout_duration);
 }
 
+void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
+{
+    struct dump_args *arg;
+    krb5_tl_data     *tlp;
+    int              i;
+
+    arg = (struct dump_args *) data;
+    fprintf(arg->ofile,
+            "policy\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
+            "%d\t%d\t%d\t%s\t%d\t",
+            entry->name,
+            entry->pw_min_life, entry->pw_max_life, entry->pw_min_length,
+            entry->pw_min_classes, entry->pw_history_num,
+            entry->policy_refcnt, entry->pw_max_fail,
+            entry->pw_failcnt_interval, entry->pw_lockout_duration,
+            entry->attributes, entry->max_life, entry->max_renewable_life,
+            entry->keygen_enctypes ? entry->keygen_enctypes : "-",
+            entry->n_tl_data);
+
+    for (tlp = entry->tl_data; tlp; tlp = tlp->tl_data_next) {
+        fprintf(arg->ofile, "%d\t%d\t",
+                (int) tlp->tl_data_type,
+                (int) tlp->tl_data_length);
+        if (tlp->tl_data_length)
+            for (i=0; i<tlp->tl_data_length; i++)
+                fprintf(arg->ofile, "%02x", tlp->tl_data_contents[i]);
+        else
+            fprintf(arg->ofile, "%d", -1);
+        fprintf(arg->ofile, "\t");
+    }
+    fprintf(arg->ofile, "\n");
+}
+
 static void print_key_data(FILE *f, krb5_key_data *key_data)
 {
     int c;
@@ -1058,9 +1104,9 @@ static krb5_error_code dump_ov_princ(krb5_pointer ptr, krb5_db_entry *kdb)
 
 /*
  * usage is:
- *      dump_db [-old] [-b6] [-b7] [-ov] [-r13] [-verbose] [-mkey_convert]
- *              [-new_mkey_file mkey_file] [-rev] [-recurse]
- *              [filename [principals...]]
+ *      dump_db [-old] [-b6] [-b7] [-ov] [-r13] [-r18] [-verbose]
+ *              [-mkey_convert] [-new_mkey_file mkey_file] [-rev]
+ *              [-recurse] [filename [principals...]]
  */
 void
 dump_db(argc, argv)
@@ -1083,7 +1129,7 @@ dump_db(argc, argv)
      * Parse the arguments.
      */
     ofile = (char *) NULL;
-    dump = &r1_8_version;
+    dump = &r1_11_version;
     arglist.flags = 0;
     new_mkey_file = 0;
     mkey_convert = 0;
@@ -1105,6 +1151,8 @@ dump_db(argc, argv)
             dump = &ov_version;
         else if (!strcmp(argv[aindex], r13option))
             dump = &r1_3_version;
+        else if (!strcmp(argv[aindex], r18option))
+            dump = &r1_8_version;
         else if (!strncmp(argv[aindex], ipropoption, sizeof(ipropoption) - 1)) {
             if (log_ctx && log_ctx->iproprole) {
                 /* Note: ipropx_version is the maximum version acceptable */
@@ -2147,7 +2195,7 @@ process_r1_8_policy(fname, kcontext, filep, flags, linenop)
      * To make this compatible with future policy extensions, we
      * ignore any additional values.
      */
-    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d",
+    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d%*[^\n]",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,
@@ -2161,6 +2209,67 @@ process_r1_8_policy(fname, kcontext, filep, flags, linenop)
                 *linenop, nread);
         return 1;
     }
+
+    if ((ret = krb5_db_create_policy(kcontext, &rec))) {
+        if (ret &&
+            ((ret = krb5_db_put_policy(kcontext, &rec)))) {
+            fprintf(stderr, "cannot create policy on line %d: %s\n",
+                    *linenop, error_message(ret));
+            return 1;
+        }
+    }
+    if (flags & FLAG_VERBOSE)
+        fprintf(stderr, "created policy %s\n", rec.name);
+
+    return 0;
+}
+
+static int
+process_r1_11_policy(fname, kcontext, filep, flags, linenop)
+    char                *fname;
+    krb5_context        kcontext;
+    FILE                *filep;
+    int                 flags;
+    int                 *linenop;
+{
+    osa_policy_ent_rec rec;
+    char namebuf[1024];
+    char keygenbuf[256];
+    int nread, ret;
+
+    memset(&rec, 0, sizeof(rec));
+
+    (*linenop)++;
+    rec.name = namebuf;
+    rec.keygen_enctypes = keygenbuf;
+
+    /*
+     * To make this compatible with future policy extensions, we
+     * ignore any additional values.
+     */
+    nread = fscanf(filep,
+                   "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
+                   "%d\t%d\t%d\t%256s\n%hd",
+                   rec.name,
+                   &rec.pw_min_life, &rec.pw_max_life,
+                   &rec.pw_min_length, &rec.pw_min_classes,
+                   &rec.pw_history_num, &rec.policy_refcnt,
+                   &rec.pw_max_fail, &rec.pw_failcnt_interval,
+                   &rec.pw_lockout_duration,
+                   &rec.attributes, &rec.max_life, &rec.max_renewable_life,
+                   rec.keygen_enctypes, &rec.n_tl_data);
+    if (nread == EOF)
+        return -1;
+    else if (nread < 15) {
+        fprintf(stderr, "cannot parse policy on line %d (%d read)\n",
+                *linenop, nread);
+        return 1;
+    }
+
+    if (rec.keygen_enctypes && !strcmp(rec.keygen_enctypes, "-"))
+        rec.keygen_enctypes = NULL;
+
+    /* XXX Get TL data */
 
     if ((ret = krb5_db_create_policy(kcontext, &rec))) {
         if (ret &&
@@ -2287,6 +2396,42 @@ process_r1_8_record(fname, kcontext, filep, flags, linenop)
 }
 
 /*
+ * process_r1_11_record()        - Handle a dump record in krb5 1.11 format.
+ *
+ * Returns -1 for end of file, 0 for success and 1 for failure.
+ */
+static int
+process_r1_11_record(fname, kcontext, filep, flags, linenop)
+    char                *fname;
+    krb5_context        kcontext;
+    FILE                *filep;
+    int                 flags;
+    int                 *linenop;
+{
+    int nread;
+    char rectype[100];
+
+    nread = fscanf(filep, "%100s\t", rectype);
+    if (nread == EOF)
+        return -1;
+    else if (nread != 1)
+        return 1;
+    if (strcmp(rectype, "princ") == 0)
+        process_k5beta6_record(fname, kcontext, filep, flags,
+                               linenop);
+    else if (strcmp(rectype, "policy") == 0)
+        process_r1_11_policy(fname, kcontext, filep, flags,
+                            linenop);
+    else {
+        fprintf(stderr, _("unknown record type \"%s\" on line %d\n"),
+                rectype, *linenop);
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
  * restore_dump()       - Restore the database from any version dump file.
  */
 static int
@@ -2370,6 +2515,8 @@ load_db(argc, argv)
             load = &ov_version;
         else if (!strcmp(argv[aindex], r13option))
             load = &r1_3_version;
+        else if (!strcmp(argv[aindex], r18option))
+            load = &r1_8_version;
         else if (!strcmp(argv[aindex], ipropoption)) {
             if (log_ctx && log_ctx->iproprole) {
                 load = &iprop_version;
@@ -2463,6 +2610,8 @@ load_db(argc, argv)
             load = &r1_3_version;
         else if (strcmp(buf, r1_8_version.header) == 0)
             load = &r1_8_version;
+        else if (strcmp(buf, r1_11_version.header) == 0)
+            load = &r1_11_version;
         else if (strncmp(buf, ov_version.header,
                          strlen(ov_version.header)) == 0)
             load = &ov_version;

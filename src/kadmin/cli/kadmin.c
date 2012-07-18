@@ -489,13 +489,13 @@ kadmin_startup(int argc, char *argv[])
                  "credentials.\n"), princstr);
         retval = kadm5_init_with_creds(context, princstr, cc, svcname, &params,
                                        KADM5_STRUCT_VERSION,
-                                       KADM5_API_VERSION_3, db_args, &handle);
+                                       KADM5_API_VERSION_4, db_args, &handle);
     } else if (use_anonymous) {
         printf(_("Authenticating as principal %s with password; "
                  "anonymous requested.\n"), princstr);
         retval = kadm5_init_anonymous(context, princstr, svcname, &params,
                                       KADM5_STRUCT_VERSION,
-                                      KADM5_API_VERSION_3, db_args, &handle);
+                                      KADM5_API_VERSION_4, db_args, &handle);
     } else if (use_keytab) {
         if (keytab_name)
             printf(_("Authenticating as principal %s with keytab %s.\n"),
@@ -505,13 +505,13 @@ kadmin_startup(int argc, char *argv[])
                    princstr);
         retval = kadm5_init_with_skey(context, princstr, keytab_name, svcname,
                                       &params, KADM5_STRUCT_VERSION,
-                                      KADM5_API_VERSION_3, db_args, &handle);
+                                      KADM5_API_VERSION_4, db_args, &handle);
     } else {
         printf(_("Authenticating as principal %s with password.\n"),
                princstr);
         retval = kadm5_init_with_password(context, princstr, password, svcname,
                                           &params, KADM5_STRUCT_VERSION,
-                                          KADM5_API_VERSION_3, db_args,
+                                          KADM5_API_VERSION_4, db_args,
                                           &handle);
     }
     if (retval) {
@@ -855,14 +855,14 @@ cleanup:
 }
 
 static void
-kadmin_free_tl_data(kadm5_principal_ent_t princ)
+kadmin_free_tl_data(krb5_int16 *n_tl_datap, krb5_tl_data **tl_datap)
 {
-    krb5_tl_data *tl_data = princ->tl_data, *next;
-    int n_tl_data = princ->n_tl_data;
+    krb5_tl_data *tl_data = *tl_datap, *next;
+    int n_tl_data = *n_tl_datap;
     int i;
 
-    princ->n_tl_data = 0;
-    princ->tl_data = NULL;
+    *n_tl_datap = 0;
+    *tl_datap = NULL;
 
     for (i = 0; tl_data && (i < n_tl_data); i++) {
         next = tl_data->tl_data_next;
@@ -872,12 +872,12 @@ kadmin_free_tl_data(kadm5_principal_ent_t princ)
     }
 }
 
-/* Construct a tl_data element and add it to the tail of princ->tl_data. */
+/* Construct a tl_data element and add it to the tail of *tl_datap. */
 static void
-add_tl_data(kadm5_principal_ent_t princ, krb5_int16 tl_type, krb5_ui_2 len,
-            krb5_octet *contents)
+add_tl_data(krb5_int16 *n_tl_datap, krb5_tl_data **tl_datap,
+            krb5_int16 tl_type, krb5_ui_2 len, krb5_octet *contents)
 {
-    krb5_tl_data *tl_data, **tlp;
+    krb5_tl_data *tl_data;
     krb5_octet *copy;
 
     copy = malloc(len);
@@ -893,9 +893,9 @@ add_tl_data(kadm5_principal_ent_t princ, krb5_int16 tl_type, krb5_ui_2 len,
     tl_data->tl_data_contents = copy;
     tl_data->tl_data_next = NULL;
 
-    for (tlp = &princ->tl_data; *tlp != NULL; tlp = &(*tlp)->tl_data_next);
-    *tlp = tl_data;
-    princ->n_tl_data++;
+    for (; *tl_datap != NULL; tl_datap = &(*tl_datap)->tl_data_next);
+    *tl_datap = tl_data;
+    (*n_tl_datap)++;
 }
 
 static void
@@ -917,7 +917,8 @@ unlock_princ(kadm5_principal_ent_t princ, long *mask, const char *caller)
         exit(1);
     }
     store_32_le((krb5_int32)now, timebuf);
-    add_tl_data(princ, KRB5_TL_LAST_ADMIN_UNLOCK, 4, timebuf);
+    add_tl_data(&princ->n_tl_data, &princ->tl_data,
+                KRB5_TL_LAST_ADMIN_UNLOCK, 4, timebuf);
     *mask |= KADM5_TL_DATA;
 }
 
@@ -945,125 +946,110 @@ kadmin_parse_princ_args(int argc, char *argv[], kadm5_principal_ent_t oprinc,
     *randkey = FALSE;
     for (i = 1; i < argc - 1; i++) {
         attrib_set = 0;
-        if (strlen(argv[i]) == 2 && !strcmp("-x",argv[i])) {
+        if (!strcmp("-x",argv[i])) {
             if (++i > argc - 2)
                 return -1;
 
-            add_tl_data(oprinc, KRB5_TL_DB_ARGS, strlen(argv[i]) + 1,
+            add_tl_data(&oprinc->n_tl_data, &oprinc->tl_data,
+                        KRB5_TL_DB_ARGS, strlen(argv[i]) + 1,
                         (krb5_octet *)argv[i]);
             *mask |= KADM5_TL_DATA;
             continue;
         }
-        if (strlen(argv[i]) == 7 && !strcmp("-expire", argv[i])) {
+        if (!strcmp("-expire", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                date = get_date(argv[i]);
-                if (date == (time_t)-1) {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                oprinc->princ_expire_time = date;
-                *mask |= KADM5_PRINC_EXPIRE_TIME;
-                continue;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
+            oprinc->princ_expire_time = date;
+            *mask |= KADM5_PRINC_EXPIRE_TIME;
+            continue;
         }
-        if (strlen(argv[i]) == 9 && !strcmp("-pwexpire", argv[i])) {
+        if (!strcmp("-pwexpire", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                date = get_date(argv[i]);
-                if (date == (time_t)-1) {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                oprinc->pw_expiration = date;
-                *mask |= KADM5_PW_EXPIRATION;
-                continue;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
+            oprinc->pw_expiration = date;
+            *mask |= KADM5_PW_EXPIRATION;
+            continue;
         }
-        if (strlen(argv[i]) == 8 && !strcmp("-maxlife", argv[i])) {
+        if (!strcmp("-maxlife", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                date = get_date(argv[i]);
-                if (date == (time_t)-1) {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                oprinc->max_life = date - now;
-                *mask |= KADM5_MAX_LIFE;
-                continue;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
+            oprinc->max_life = date - now;
+            *mask |= KADM5_MAX_LIFE;
+            continue;
         }
-        if (strlen(argv[i]) == 13 && !strcmp("-maxrenewlife", argv[i])) {
+        if (!strcmp("-maxrenewlife", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                date = get_date(argv[i]);
-                if (date == (time_t)-1) {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                oprinc->max_renewable_life = date - now;
-                *mask |= KADM5_MAX_RLIFE;
-                continue;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
+            oprinc->max_renewable_life = date - now;
+            *mask |= KADM5_MAX_RLIFE;
+            continue;
         }
-        if (strlen(argv[i]) == 5 && !strcmp("-kvno", argv[i])) {
+        if (!strcmp("-kvno", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                oprinc->kvno = atoi(argv[i]);
-                *mask |= KADM5_KVNO;
-                continue;
-            }
+            oprinc->kvno = atoi(argv[i]);
+            *mask |= KADM5_KVNO;
+            continue;
         }
-        if (strlen(argv[i]) == 7 && !strcmp("-policy", argv[i])) {
+        if (!strcmp("-policy", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                oprinc->policy = argv[i];
-                *mask |= KADM5_POLICY;
-                continue;
-            }
+            oprinc->policy = argv[i];
+            *mask |= KADM5_POLICY;
+            continue;
         }
-        if (strlen(argv[i]) == 12 && !strcmp("-clearpolicy", argv[i])) {
+        if (!strcmp("-clearpolicy", argv[i])) {
             oprinc->policy = NULL;
             *mask |= KADM5_POLICY_CLR;
             continue;
         }
-        if (strlen(argv[i]) == 3 && !strcmp("-pw", argv[i])) {
+        if (!strcmp("-pw", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                *pass = argv[i];
-                continue;
-            }
+            *pass = argv[i];
+            continue;
         }
-        if (strlen(argv[i]) == 8 && !strcmp("-randkey", argv[i])) {
+        if (!strcmp("-randkey", argv[i])) {
             *randkey = TRUE;
             continue;
         }
-        if (strlen(argv[i]) == 7 && !strcmp("-unlock", argv[i])) {
+        if (!strcmp("-unlock", argv[i])) {
             unlock_princ(oprinc, mask, caller);
             continue;
         }
         if (!strcmp("-e", argv[i])) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                retval = krb5_string_to_keysalts(argv[i], ", \t", ":.-", 0,
-                                                 ks_tuple, n_ks_tuple);
-                if (retval) {
-                    com_err(caller, retval, _("while parsing keysalts %s"),
-                            argv[i]);
-                    return -1;
-                }
+            retval = krb5_string_to_keysalts(argv[i], ", \t", ":.-", 0,
+                                             ks_tuple, n_ks_tuple);
+            if (retval) {
+                com_err(caller, retval, _("while parsing keysalts %s"),
+                        argv[i]);
+                return -1;
             }
             continue;
         }
@@ -1275,7 +1261,7 @@ cleanup:
     krb5_free_principal(context, princ.principal);
     free(ks_tuple);
     free(canon);
-    kadmin_free_tl_data(&princ);
+    kadmin_free_tl_data(&princ.n_tl_data, &princ.tl_data);
 }
 
 void
@@ -1339,7 +1325,7 @@ kadmin_modprinc(int argc, char *argv[])
 cleanup:
     krb5_free_principal(context, kprinc);
     krb5_free_principal(context, princ.principal);
-    kadmin_free_tl_data(&princ);
+    kadmin_free_tl_data(&princ.n_tl_data, &princ.tl_data);
     free(canon);
     free(ks_tuple);
 }
@@ -1489,111 +1475,137 @@ static int
 kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
                          long *mask, char *caller)
 {
+    krb5_error_code retval;
     int i;
     time_t now, date;
 
     time(&now);
     *mask = 0;
     for (i = 1; i < argc - 1; i++) {
-        if (strlen(argv[i]) == 8 && !strcmp(argv[i], "-maxlife")) {
+        if (!strcmp(argv[i], "-maxlife")) {
             if (++i > argc -2)
                 return -1;
-            else {
-                date = get_date(argv[i]);
-                if (date == (time_t)-1) {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                policy->pw_max_life = date - now;
-                *mask |= KADM5_PW_MAX_LIFE;
-                continue;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
-        } else if (strlen(argv[i]) == 8 && !strcmp(argv[i], "-minlife")) {
+            policy->pw_max_life = date - now;
+            *mask |= KADM5_PW_MAX_LIFE;
+            continue;
+        } else if (!strcmp(argv[i], "-minlife")) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                date = get_date(argv[i]);
-                if (date == (time_t)-1) {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                policy->pw_min_life = date - now;
-                *mask |= KADM5_PW_MIN_LIFE;
-                continue;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
-        } else if (strlen(argv[i]) == 10 && !strcmp(argv[i], "-minlength")) {
+            policy->pw_min_life = date - now;
+            *mask |= KADM5_PW_MIN_LIFE;
+            continue;
+        } else if (!strcmp(argv[i], "-minlength")) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                policy->pw_min_length = atoi(argv[i]);
-                *mask |= KADM5_PW_MIN_LENGTH;
-                continue;
-            }
-        } else if (strlen(argv[i]) == 11 && !strcmp(argv[i], "-minclasses")) {
+            policy->pw_min_length = atoi(argv[i]);
+            *mask |= KADM5_PW_MIN_LENGTH;
+            continue;
+        } else if (!strcmp(argv[i], "-minclasses")) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                policy->pw_min_classes = atoi(argv[i]);
-                *mask |= KADM5_PW_MIN_CLASSES;
-                continue;
-            }
-        } else if (strlen(argv[i]) == 8 && !strcmp(argv[i], "-history")) {
+            policy->pw_min_classes = atoi(argv[i]);
+            *mask |= KADM5_PW_MIN_CLASSES;
+            continue;
+        } else if (!strcmp(argv[i], "-history")) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                policy->pw_history_num = atoi(argv[i]);
-                *mask |= KADM5_PW_HISTORY_NUM;
-                continue;
-            }
+            policy->pw_history_num = atoi(argv[i]);
+            *mask |= KADM5_PW_HISTORY_NUM;
+            continue;
         } else if (strlen(argv[i]) == 11 &&
                    !strcmp(argv[i], "-maxfailure")) {
             if (++i > argc - 2)
                 return -1;
-            else {
-                policy->pw_max_fail = atoi(argv[i]);
-                *mask |= KADM5_PW_MAX_FAILURE;
-                continue;
-            }
+            policy->pw_max_fail = atoi(argv[i]);
+            *mask |= KADM5_PW_MAX_FAILURE;
+            continue;
         } else if (strlen(argv[i]) == 21 &&
                    !strcmp(argv[i], "-failurecountinterval")) {
             if (++i > argc - 2)
                 return -1;
+            /* Allow bare numbers for compatibility with 1.8-1.9. */
+            date = get_date(argv[i]);
+            if (date != (time_t)-1)
+                policy->pw_failcnt_interval = date - now;
+            else if (isdigit(*argv[i]))
+                policy->pw_failcnt_interval = atoi(argv[i]);
             else {
-                /* Allow bare numbers for compatibility with 1.8-1.9. */
-                date = get_date(argv[i]);
-                if (date != (time_t)-1)
-                    policy->pw_failcnt_interval = date - now;
-                else if (isdigit(*argv[i]))
-                    policy->pw_failcnt_interval = atoi(argv[i]);
-                else {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                *mask |= KADM5_PW_FAILURE_COUNT_INTERVAL;
-                continue;
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
+            *mask |= KADM5_PW_FAILURE_COUNT_INTERVAL;
+            continue;
         } else if (strlen(argv[i]) == 16 &&
                    !strcmp(argv[i], "-lockoutduration")) {
             if (++i > argc - 2)
                 return -1;
+            /* Allow bare numbers for compatibility with 1.8-1.9. */
+            date = get_date(argv[i]);
+            if (date != (time_t)-1)
+                policy->pw_lockout_duration = date - now;
+            else if (isdigit(*argv[i]))
+                policy->pw_lockout_duration = atoi(argv[i]);
             else {
-                /* Allow bare numbers for compatibility with 1.8-1.9. */
-                date = get_date(argv[i]);
-                if (date != (time_t)-1)
-                    policy->pw_lockout_duration = date - now;
-                else if (isdigit(*argv[i]))
-                    policy->pw_lockout_duration = atoi(argv[i]);
-                else {
-                    fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                            argv[i]);
-                    return -1;
-                }
-                *mask |= KADM5_PW_LOCKOUT_DURATION;
-                continue;
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
             }
+            *mask |= KADM5_PW_LOCKOUT_DURATION;
+            continue;
+        } else if (!strcmp(argv[i], "-maxticketlife")) {
+            if (++i > argc - 2)
+                return -1;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
+            }
+            policy->max_life = date - now;
+            *mask |= KADM5_POLICY_MAX_LIFE;
+            continue;
+        } else if (!strcmp(argv[i], "-maxrenewlife")) {
+            if (++i > argc - 2)
+                return -1;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
+            }
+            policy->max_renewable_life = date - now;
+            *mask |= KADM5_POLICY_MAX_RLIFE;
+            continue;
+        } else if (!strcmp(argv[i], "-keygenenctypes")) {
+            krb5_key_salt_tuple *ks_tuple = NULL;
+            int n_ks_tuple = 0;
+
+            if (++i > argc - 2)
+                return -1;
+            retval = krb5_string_to_keysalts(argv[i], ", \t", ":.-", 0,
+                                             &ks_tuple, &n_ks_tuple);
+            if (retval) {
+                com_err(caller, retval, _("while parsing keysalts %s"),
+                        argv[i]);
+                return -1;
+            }
+            free(ks_tuple);
+            policy->keygen_enctypes = argv[i];
+            *mask |= KADM5_POLICY_KEYGEN_ENCTYPES;
+            continue;
         } else
             return -1;
     }
@@ -1612,7 +1624,11 @@ kadmin_addmodpol_usage(char *func)
     fprintf(stderr,
             _("\t\t[-maxlife time] [-minlife time] [-minlength length]\n"
               "\t\t[-minclasses number] [-history number]\n"
-              "\t\t[-maxfailure number] [-failurecountinterval time]\n"));
+              "\t\t[-maxfailure number] [-failurecountinterval time]\n"
+#ifdef NOTYET
+              "\t\t[-maxticketlife time] [-maxrenewlife time]\n"
+#endif
+              "\t\t[-keygenenctypes enctypes]\n"));
     fprintf(stderr, _("\t\t[-lockoutduration time]\n"));
 }
 

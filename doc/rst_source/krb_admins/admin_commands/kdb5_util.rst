@@ -93,7 +93,7 @@ COMMANDS
 
 .. _kdb5_util_dump:
 
-       **dump** [**-old|-b6|-b7|-ov|-r13**] [**-verbose**] [**-mkey_convert**] [**-new_mkey_file** *mkey_file*] [**-rev**] [**-recurse**] [*filename* [*principals*...]]
+       **dump** [**-old|-b6|-b7|-ov|-r13|-r18**] [**-verbose**] [**-mkey_convert**] [**-new_mkey_file** *mkey_file*] [**-rev**] [**-recurse**] [*filename* [*principals*...]]
               Dumps the current Kerberos and KADM5 database into an ASCII file.  By default, the database is dumped in current format, "*kdb5_util*
               load_dump version 6".  If filename is not specified, or is the string "-", the dump is sent to standard output.  Options:
 

@@ -733,6 +733,13 @@ sets the duration for which the principal is locked from
 authenticating if too many authentication failures occur without the
 specified failure count interval elapsing.  A duration of 0 means
 forever.
+.TP
+\fB\-allowedkeysalts\fP \fIkeysalttypes\fP
+sets the key/salt types that the principal is allowed to have keys
+for in order of preference.  The principal will be allowed keys of
+any subset of these key/salt types.  The principal's new keys in
+any key/password change/set operation will be ordered according to
+the order of the enctypes given in this option.
 .sp
 .nf
 .TP

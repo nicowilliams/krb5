@@ -99,7 +99,7 @@ Stores the master principal's keys in a stash file.  The
 .B \-f
 argument can be used to override the keyfile specified at startup.
 .TP
-\fBdump\fP [\fB\-old\fP|\fB-b6\fP|\fB-b7\fP|\fB-ov\fP|\fB-r13\fP]
+\fBdump\fP [\fB\-old\fP|\fB-b6\fP|\fB-b7\fP|\fB-ov\fP|\fB-r13\fP|\fB-r18\fP]
 [\fB\-verbose\fP] [\fB\-mkey_convert\fP]
 [\fB\-new_mkey_file\fP \fImkey_file\fP] [\fB\-rev\fP] [\fB\-recurse\fP]
 [\fIfilename\fP [\fIprincipals...\fP]]
@@ -131,6 +131,9 @@ format.
 .B \-r13
 causes the dump to be in the Kerberos 5 1.3 format ("kdb5_util load_dump version 5").  This was the dump format produced on releases prior to 1.8.
 .TP
+.B \-r18
+causes the dump to be in the Kerberos 5 1.8 format ("kdb5_util load_dump version 5").  This was the dump format produced on releases prior to 1.11.
+.TP
 .B \-verbose
 causes the name of each principal and policy to be printed as it is
 dumped.
@@ -157,7 +160,7 @@ option will probably retrieve more principals than the \fB\-rev\fP
 option will.
 .RE
 .TP
-\fBload\fP \fB\-old\fP|\fB-b6\fP|\fB-b7\fP|\fB-ov\fP|\fB-r13\fP] [\fB\-hash\fP]
+\fBload\fP \fB\-old\fP|\fB-b6\fP|\fB-b7\fP|\fB-ov\fP|\fB-r13\fP|\fB-r18\fP] [\fB\-hash\fP]
 [\fB\-verbose\fP] [\fB\-update\fP] \fIfilename dbname\fP
 .br
 Loads a database dump from the named file into the named database.

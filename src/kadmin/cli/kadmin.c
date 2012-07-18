@@ -855,20 +855,20 @@ cleanup:
 }
 
 static void
-kadmin_free_tl_data(kadm5_principal_ent_t princ)
+kadmin_free_tl_data(krb5_int16 *n_tl_data, krb5_tl_data **tl_data)
 {
-    krb5_tl_data *tl_data = princ->tl_data, *next;
-    int n_tl_data = princ->n_tl_data;
+    krb5_tl_data *tld = *tl_data, *next;
+    int n_tld = *n_tl_data;
     int i;
 
-    princ->n_tl_data = 0;
-    princ->tl_data = NULL;
+    *n_tl_data = 0;
+    *tl_data = NULL;
 
-    for (i = 0; tl_data && (i < n_tl_data); i++) {
-        next = tl_data->tl_data_next;
-        free(tl_data->tl_data_contents);
-        free(tl_data);
-        tl_data = next;
+    for (i = 0; tld && (i < n_tld); i++) {
+        next = tld->tl_data_next;
+        free(tld->tl_data_contents);
+        free(tld);
+        tld = next;
     }
 }
 
@@ -1275,7 +1275,7 @@ cleanup:
     krb5_free_principal(context, princ.principal);
     free(ks_tuple);
     free(canon);
-    kadmin_free_tl_data(&princ);
+    kadmin_free_tl_data(&princ.n_tl_data, &princ.tl_data);
 }
 
 void
@@ -1339,7 +1339,7 @@ kadmin_modprinc(int argc, char *argv[])
 cleanup:
     krb5_free_principal(context, kprinc);
     krb5_free_principal(context, princ.principal);
-    kadmin_free_tl_data(&princ);
+    kadmin_free_tl_data(&princ.n_tl_data, &princ.tl_data);
     free(canon);
     free(ks_tuple);
 }

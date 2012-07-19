@@ -279,6 +279,7 @@ static const char updateoption[] = "-update";
 static const char hashoption[] = "-hash";
 static const char ovoption[] = "-ov";
 static const char r13option[] = "-r13";
+static const char r18option[] = "-r18";
 static const char dump_tmptrail[] = "~";
 
 /*
@@ -1101,9 +1102,9 @@ static krb5_error_code dump_ov_princ(krb5_pointer ptr, krb5_db_entry *kdb)
 
 /*
  * usage is:
- *      dump_db [-old] [-b6] [-b7] [-ov] [-r13] [-verbose] [-mkey_convert]
- *              [-new_mkey_file mkey_file] [-rev] [-recurse]
- *              [filename [principals...]]
+ *      dump_db [-old] [-b6] [-b7] [-ov] [-r13] [-r18] [-verbose]
+ *              [-mkey_convert] [-new_mkey_file mkey_file] [-rev]
+ *              [-recurse] [filename [principals...]]
  */
 void
 dump_db(argc, argv)
@@ -1126,7 +1127,7 @@ dump_db(argc, argv)
      * Parse the arguments.
      */
     ofile = (char *) NULL;
-    dump = &r1_8_version;
+    dump = &r1_11_version;
     arglist.flags = 0;
     new_mkey_file = 0;
     mkey_convert = 0;
@@ -1148,6 +1149,8 @@ dump_db(argc, argv)
             dump = &ov_version;
         else if (!strcmp(argv[aindex], r13option))
             dump = &r1_3_version;
+        else if (!strcmp(argv[aindex], r18option))
+            dump = &r1_8_version;
         else if (!strncmp(argv[aindex], ipropoption, sizeof(ipropoption) - 1)) {
             if (log_ctx && log_ctx->iproprole) {
                 /* Note: ipropx_version is the maximum version acceptable */
@@ -2600,6 +2603,8 @@ load_db(argc, argv)
             load = &r1_3_version;
         else if (strcmp(buf, r1_8_version.header) == 0)
             load = &r1_8_version;
+        else if (strcmp(buf, r1_11_version.header) == 0)
+            load = &r1_11_version;
         else if (strncmp(buf, ov_version.header,
                          strlen(ov_version.header)) == 0)
             load = &ov_version;

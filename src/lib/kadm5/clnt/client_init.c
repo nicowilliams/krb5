@@ -349,7 +349,7 @@ init_any(krb5_context context, char *client_name, enum init_type init_type,
     }
     /* Drop down to v2 wire protocol if server does not support v3 */
     if (r->code == KADM5_NEW_SERVER_API_VERSION &&
-         handle->api_version == KADM5_API_VERSION_3) {
+        handle->api_version == KADM5_API_VERSION_3) {
         handle->api_version = KADM5_API_VERSION_2;
         r = init_2(&handle->api_version, handle->clnt);
         if (r == NULL) {

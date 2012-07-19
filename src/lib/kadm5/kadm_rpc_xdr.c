@@ -492,7 +492,7 @@ _xdr_kadm5_policy_ent_rec(XDR *xdrs, kadm5_policy_ent_rec *objp, int vers)
 	if (!xdr_long(xdrs, &objp->policy_refcnt)) {
 		return (FALSE);
 	}
-        if (xdrs->x_op == XDR_DECODE) {
+	if (xdrs->x_op == XDR_DECODE) {
 		objp->pw_max_fail = 0;
 		objp->pw_failcnt_interval = 0;
 		objp->pw_lockout_duration = 0;
@@ -501,36 +501,36 @@ _xdr_kadm5_policy_ent_rec(XDR *xdrs, kadm5_policy_ent_rec *objp, int vers)
 		objp->max_renewable_life = 0;
 		objp->n_tl_data = 0;
 		objp->tl_data = NULL;
-        }
+	}
 	if (vers == KADM5_API_VERSION_3 ||
-            vers == KADM5_API_VERSION_4) {
+	    vers == KADM5_API_VERSION_4) {
 		if (!xdr_krb5_kvno(xdrs, &objp->pw_max_fail))
 			return (FALSE);
 		if (!xdr_krb5_deltat(xdrs, &objp->pw_failcnt_interval))
 			return (FALSE);
 		if (!xdr_krb5_deltat(xdrs, &objp->pw_lockout_duration))
 			return (FALSE);
-        }
+	}
 	if (vers == KADM5_API_VERSION_4) {
-                if (!xdr_krb5_flags(xdrs, &objp->attributes)) {
-                        return (FALSE);
-                }
-                if (!xdr_krb5_deltat(xdrs, &objp->max_life)) {
-                        return (FALSE);
-                }
-                if (!xdr_krb5_deltat(xdrs, &objp->max_renewable_life)) {
-                        return (FALSE);
-                }
-                if (!xdr_string(xdrs, &objp->keygen_enctypes, 256)) {
-                        return (FALSE);
-                }
-                if (!xdr_krb5_int16(xdrs, &objp->n_tl_data)) {
-                        return (FALSE);
-                }
-                if (!xdr_nulltype(xdrs, (void **) &objp->tl_data,
-                                  xdr_krb5_tl_data)) {
-                        return FALSE;
-                }
+		if (!xdr_krb5_flags(xdrs, &objp->attributes)) {
+			return (FALSE);
+		}
+		if (!xdr_krb5_deltat(xdrs, &objp->max_life)) {
+			return (FALSE);
+		}
+		if (!xdr_krb5_deltat(xdrs, &objp->max_renewable_life)) {
+			return (FALSE);
+		}
+		if (!xdr_string(xdrs, &objp->keygen_enctypes, 256)) {
+			return (FALSE);
+		}
+		if (!xdr_krb5_int16(xdrs, &objp->n_tl_data)) {
+			return (FALSE);
+		}
+		if (!xdr_nulltype(xdrs, (void **) &objp->tl_data,
+				  xdr_krb5_tl_data)) {
+			return FALSE;
+		}
 	}
 	return (TRUE);
 }

@@ -977,7 +977,8 @@ void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
             entry->policy_refcnt, entry->pw_max_fail,
             entry->pw_failcnt_interval, entry->pw_lockout_duration,
             entry->attributes, entry->max_life, entry->max_renewable_life,
-            entry->keygen_enctypes, entry->n_tl_data);
+            entry->keygen_enctypes ? entry->keygen_enctypes : "-",
+            entry->n_tl_data);
 
     for (tlp = entry->tl_data; tlp; tlp = tlp->tl_data_next) {
         fprintf(arg->ofile, "%d\t%d\t",
@@ -990,6 +991,7 @@ void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
             fprintf(arg->ofile, "%d", -1);
         fprintf(arg->ofile, "\t");
     }
+    fprintf(arg->ofile, "\n");
 }
 
 static void print_key_data(FILE *f, krb5_key_data *key_data)
@@ -2193,7 +2195,7 @@ process_r1_8_policy(fname, kcontext, filep, flags, linenop)
      * To make this compatible with future policy extensions, we
      * ignore any additional values.
      */
-    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d",
+    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d%*[^\n]",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,
@@ -2263,6 +2265,9 @@ process_r1_11_policy(fname, kcontext, filep, flags, linenop)
                 *linenop, nread);
         return 1;
     }
+
+    if (rec.keygen_enctypes && !strcmp(rec.keygen_enctypes, "-"))
+        rec.keygen_enctypes = NULL;
 
     /* XXX Get TL data */
 

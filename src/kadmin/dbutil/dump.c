@@ -2225,17 +2225,17 @@ process_r1_8_policy(fname, kcontext, filep, flags, linenop)
 }
 
 static int
-process_r1_11_policy(fname, kcontext, filep, flags, linenop)
-    char                *fname;
-    krb5_context        kcontext;
-    FILE                *filep;
-    int                 flags;
-    int                 *linenop;
+process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
+                     int flags, int *linenop)
 {
-    osa_policy_ent_rec rec;
-    char namebuf[1024];
-    char keygenbuf[256];
-    int nread, ret;
+    osa_policy_ent_rec    rec;
+    krb5_tl_data        **tlp, *tl, *tl_next;
+    char                  namebuf[1024];
+    char                  keygenbuf[256];
+    int                   nread;
+    int                   ret = 0;
+    krb5_int32            i, t1, t2;
+    const char           *try2read = NULL;
 
     memset(&rec, 0, sizeof(rec));
 
@@ -2260,7 +2260,7 @@ process_r1_11_policy(fname, kcontext, filep, flags, linenop)
                    rec.keygen_enctypes, &rec.n_tl_data);
     if (nread == EOF)
         return -1;
-    else if (nread < 15) {
+    else if (nread != 15) {
         fprintf(stderr, "cannot parse policy on line %d (%d read)\n",
                 *linenop, nread);
         return 1;
@@ -2269,19 +2269,70 @@ process_r1_11_policy(fname, kcontext, filep, flags, linenop)
     if (rec.keygen_enctypes && !strcmp(rec.keygen_enctypes, "-"))
         rec.keygen_enctypes = NULL;
 
-    /* XXX Get TL data */
+    /* Get TL data */
+    tlp = &rec.tl_data;
+    for (i = 0; i < rec.n_tl_data; i++) {
+        if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL) {
+            ret = ENOMEM;
+            goto cleanup;
+        }
+        memset(*tlp, 0, sizeof(krb5_tl_data));
+        tlp = &((*tlp)->tl_data_next);
+    }
+    ret = EINVAL;
+    for (tl = rec.tl_data; tl; tl = tl->tl_data_next) {
+        nread = fscanf(filep, "%d\t%d\t", &t1, &t2);
+        if (nread != 2) {
+            try2read = read_ttypelen;
+            goto cleanup;
+        }
+        tl->tl_data_type = (krb5_int16) t1;
+        tl->tl_data_length = (krb5_int16) t2;
+        if (tl->tl_data_length) {
+            if ((tl->tl_data_contents = malloc((size_t) t2 + 1)) == NULL) {
+                ret = ENOMEM;
+                goto cleanup;
+            }
+            if (read_octet_string(filep, tl->tl_data_contents,
+                                  tl->tl_data_length)) {
+                try2read = read_tcontents;
+                goto cleanup;
+            }
+        } else {
+            nread = fscanf(filep, "%d", &t1);
+            if ((nread != 1) || (t1 != -1)) {
+                try2read = read_tcontents;
+                break;
+            }
+        }
+    }
+    (void) fscanf(filep, "%*[^\n]"); /* Just in case! */
 
     if ((ret = krb5_db_create_policy(kcontext, &rec))) {
         if (ret &&
             ((ret = krb5_db_put_policy(kcontext, &rec)))) {
             fprintf(stderr, "cannot create policy on line %d: %s\n",
                     *linenop, error_message(ret));
-            return 1;
+            try2read = NULL;
+            goto cleanup;
         }
     }
     if (flags & FLAG_VERBOSE)
         fprintf(stderr, "created policy %s\n", rec.name);
 
+cleanup:
+    for (tl = rec.tl_data; tl; tl = tl_next) {
+        tl_next = tl->tl_data_next;
+        free(tl->tl_data_contents);
+        free(tl);
+    }
+    if (ret == ENOMEM)
+        try2read = no_mem_fmt;
+    if (ret) {
+        if (try2read)
+            fprintf(stderr, read_err_fmt, fname, *linenop, try2read);
+        return 1;
+    }
     return 0;
 }
 

@@ -12,8 +12,8 @@ krb5_conf1 = {'all': {'libdefaults': {
 realm = K5Realm(krb5_conf=krb5_conf1, create_host=False, get_creds=False)
 
 # Add policies
-realm.run_kadminl('addpol -keygen_enctypes aes256-cts:normal kg1')
-realm.run_kadminl('addpol -keygen_enctypes aes256-cts:normal,rc4-hmac:normal kg2')
+realm.run_kadminl('addpol -keygenenctypes aes256-cts:normal kg1')
+realm.run_kadminl('addpol -keygenenctypes aes256-cts:normal,rc4-hmac:normal kg2')
 
 realm.run_kadminl('addprinc -randkey -e aes256-cts:normal server')
 

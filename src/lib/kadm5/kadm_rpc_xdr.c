@@ -522,7 +522,7 @@ _xdr_kadm5_policy_ent_rec(XDR *xdrs, kadm5_policy_ent_rec *objp, int vers)
 		if (!xdr_krb5_deltat(xdrs, &objp->max_renewable_life)) {
 			return (FALSE);
 		}
-		if (!xdr_string(xdrs, &objp->keygen_enctypes, 256)) {
+		if (!xdr_nullstring(xdrs, &objp->keygen_enctypes)) {
 			return (FALSE);
 		}
 		if (!xdr_krb5_int16(xdrs, &objp->n_tl_data)) {

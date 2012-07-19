@@ -855,29 +855,29 @@ cleanup:
 }
 
 static void
-kadmin_free_tl_data(krb5_int16 *n_tl_data, krb5_tl_data **tl_data)
+kadmin_free_tl_data(krb5_int16 *n_tl_datap, krb5_tl_data **tl_datap)
 {
-    krb5_tl_data *tld = *tl_data, *next;
-    int n_tld = *n_tl_data;
+    krb5_tl_data *tl_data = *tl_datap, *next;
+    int n_tl_data = *n_tl_datap;
     int i;
 
-    *n_tl_data = 0;
-    *tl_data = NULL;
+    *n_tl_datap = 0;
+    *tl_datap = NULL;
 
-    for (i = 0; tld && (i < n_tld); i++) {
-        next = tld->tl_data_next;
-        free(tld->tl_data_contents);
-        free(tld);
-        tld = next;
+    for (i = 0; tl_data && (i < n_tl_data); i++) {
+        next = tl_data->tl_data_next;
+        free(tl_data->tl_data_contents);
+        free(tl_data);
+        tl_data = next;
     }
 }
 
-/* Construct a tl_data element and add it to the tail of princ->tl_data. */
+/* Construct a tl_data element and add it to the tail of *tl_datap. */
 static void
-add_tl_data(kadm5_principal_ent_t princ, krb5_int16 tl_type, krb5_ui_2 len,
-            krb5_octet *contents)
+add_tl_data(krb5_int16 *n_tl_datap, krb5_tl_data **tl_datap,
+            krb5_int16 tl_type, krb5_ui_2 len, krb5_octet *contents)
 {
-    krb5_tl_data *tl_data, **tlp;
+    krb5_tl_data *tl_data;
     krb5_octet *copy;
 
     copy = malloc(len);
@@ -893,9 +893,9 @@ add_tl_data(kadm5_principal_ent_t princ, krb5_int16 tl_type, krb5_ui_2 len,
     tl_data->tl_data_contents = copy;
     tl_data->tl_data_next = NULL;
 
-    for (tlp = &princ->tl_data; *tlp != NULL; tlp = &(*tlp)->tl_data_next);
-    *tlp = tl_data;
-    princ->n_tl_data++;
+    for (; *tl_datap != NULL; tl_datap = &(*tl_datap)->tl_data_next);
+    *tl_datap = tl_data;
+    (*n_tl_datap)++;
 }
 
 static void
@@ -917,7 +917,8 @@ unlock_princ(kadm5_principal_ent_t princ, long *mask, const char *caller)
         exit(1);
     }
     store_32_le((krb5_int32)now, timebuf);
-    add_tl_data(princ, KRB5_TL_LAST_ADMIN_UNLOCK, 4, timebuf);
+    add_tl_data(&princ->n_tl_data, &princ->tl_data,
+                KRB5_TL_LAST_ADMIN_UNLOCK, 4, timebuf);
     *mask |= KADM5_TL_DATA;
 }
 
@@ -949,7 +950,8 @@ kadmin_parse_princ_args(int argc, char *argv[], kadm5_principal_ent_t oprinc,
             if (++i > argc - 2)
                 return -1;
 
-            add_tl_data(oprinc, KRB5_TL_DB_ARGS, strlen(argv[i]) + 1,
+            add_tl_data(&oprinc->n_tl_data, &oprinc->tl_data,
+                        KRB5_TL_DB_ARGS, strlen(argv[i]) + 1,
                         (krb5_octet *)argv[i]);
             *mask |= KADM5_TL_DATA;
             continue;
@@ -1594,6 +1596,35 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
                 *mask |= KADM5_PW_LOCKOUT_DURATION;
                 continue;
             }
+        } else if (!strcmp(argv[i], "-maxticketlife")) {
+            if (++i > argc - 2)
+                return -1;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
+            }
+            policy->max_life = date - now;
+            *mask |= KADM5_POLICY_MAX_LIFE;
+            continue;
+        } else if (!strcmp(argv[i], "-maxrenewlife")) {
+            if (++i > argc - 2)
+                return -1;
+            date = get_date(argv[i]);
+            if (date == (time_t)-1) {
+                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
+                        argv[i]);
+                return -1;
+            }
+            policy->max_renewable_life = date - now;
+            *mask |= KADM5_POLICY_MAX_RLIFE;
+            continue;
+        } else if (!strcmp(argv[i], "-keygenenctypes")) {
+            if (++i > argc - 2)
+                return -1;
+            policy->keygen_enctypes = argv[i];
+            *mask |= KADM5_POLICY_KEYGEN_ENCTYPES;
         } else
             return -1;
     }
@@ -1612,7 +1643,9 @@ kadmin_addmodpol_usage(char *func)
     fprintf(stderr,
             _("\t\t[-maxlife time] [-minlife time] [-minlength length]\n"
               "\t\t[-minclasses number] [-history number]\n"
-              "\t\t[-maxfailure number] [-failurecountinterval time]\n"));
+              "\t\t[-maxfailure number] [-failurecountinterval time]\n"
+              "\t\t[-maxticketlife time] [-maxrenewlife time]\n"
+              "\t\t[-keygenenctypes enctypes]\n"));
     fprintf(stderr, _("\t\t[-lockoutduration time]\n"));
 }
 

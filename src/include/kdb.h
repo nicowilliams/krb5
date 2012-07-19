@@ -224,6 +224,7 @@ typedef struct _osa_policy_ent_t {
     krb5_ui_4       attributes;
     krb5_ui_4       max_life;
     krb5_ui_4       max_renewable_life;
+    char          * keygen_enctypes;
     krb5_int16      n_tl_data;
     krb5_tl_data  * tl_data;
 } osa_policy_ent_rec, *osa_policy_ent_t;

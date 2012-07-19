@@ -128,7 +128,8 @@ typedef long            kadm5_ret_t;
 #define KADM5_POLICY_ATTRIBUTES         0x00800000
 #define KADM5_POLICY_MAX_LIFE           0x01000000
 #define KADM5_POLICY_MAX_RLIFE          0x02000000
-#define KADM5_POLICY_TL_DATA            0x04000000
+#define KADM5_POLICY_KEYGEN_ENCTYPES    0x04000000
+#define KADM5_POLICY_TL_DATA            0x08000000
 
 /* kadm5_config_params */
 #define KADM5_CONFIG_REALM              0x00000001
@@ -228,6 +229,7 @@ typedef struct _kadm5_policy_ent_t {
     krb5_flags      attributes;
     krb5_deltat     max_life;
     krb5_deltat     max_renewable_life;
+    char            *keygen_enctypes;
     krb5_int16      n_tl_data;
     krb5_tl_data    *tl_data;
 } kadm5_policy_ent_rec, *kadm5_policy_ent_t;

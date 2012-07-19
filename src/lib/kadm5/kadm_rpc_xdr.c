@@ -499,6 +499,7 @@ _xdr_kadm5_policy_ent_rec(XDR *xdrs, kadm5_policy_ent_rec *objp, int vers)
 		objp->attributes = 0;
 		objp->max_life = 0;
 		objp->max_renewable_life = 0;
+		objp->keygen_enctypes = NULL;
 		objp->n_tl_data = 0;
 		objp->tl_data = NULL;
 	}

@@ -297,7 +297,8 @@ kadm5_modify_policy_internal(void *server_handle,
     }
     if ((mask & KADM5_REF_COUNT))
         p->policy_refcnt = entry->policy_refcnt;
-    if (handle->api_version == KADM5_API_VERSION_3) {
+    if (handle->api_version == KADM5_API_VERSION_3 ||
+        handle->api_version == KADM5_API_VERSION_4) {
         if ((mask & KADM5_PW_MAX_FAILURE))
             p->pw_max_fail = entry->pw_max_fail;
         if ((mask & KADM5_PW_FAILURE_COUNT_INTERVAL))
@@ -305,7 +306,24 @@ kadm5_modify_policy_internal(void *server_handle,
         if ((mask & KADM5_PW_LOCKOUT_DURATION))
             p->pw_lockout_duration = entry->pw_lockout_duration;
     }
+    if (handle->api_version == KADM5_API_VERSION_4) {
+        if ((mask & KADM5_POLICY_ATTRIBUTES))
+            p->attributes = entry->attributes;
+        if ((mask & KADM5_POLICY_MAX_LIFE))
+            p->max_life = entry->max_life;
+        if ((mask & KADM5_POLICY_MAX_RLIFE))
+            p->max_renewable_life = entry->max_renewable_life;
+        if ((mask & KADM5_POLICY_KEYGEN_ENCTYPES))
+            p->keygen_enctypes = entry->keygen_enctypes;
+        if ((mask & KADM5_POLICY_TL_DATA)) {
+            p->n_tl_data = entry->n_tl_data;
+            p->tl_data = entry->tl_data;
+        }
+    }
     ret = krb5_db_put_policy(handle->context, p);
+    p->keygen_enctypes = NULL;
+    p->n_tl_data = 0;
+    p->tl_data = NULL;
     krb5_db_free_policy(handle->context, p);
     return ret;
 }

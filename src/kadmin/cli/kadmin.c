@@ -1475,6 +1475,7 @@ static int
 kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
                          long *mask, char *caller)
 {
+    krb5_error_code retval;
     int i;
     time_t now, date;
 
@@ -1589,10 +1590,22 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
             *mask |= KADM5_POLICY_MAX_RLIFE;
             continue;
         } else if (!strcmp(argv[i], "-keygenenctypes")) {
+            krb5_key_salt_tuple *ks_tuple = NULL;
+            int n_ks_tuple = 0;
+
             if (++i > argc - 2)
                 return -1;
+            retval = krb5_string_to_keysalts(argv[i], ", \t", ":.-", 0,
+                                             &ks_tuple, &n_ks_tuple);
+            if (retval) {
+                com_err(caller, retval, _("while parsing keysalts %s"),
+                        argv[i]);
+                return -1;
+            }
+            free(ks_tuple);
             policy->keygen_enctypes = argv[i];
             *mask |= KADM5_POLICY_KEYGEN_ENCTYPES;
+            continue;
         } else
             return -1;
     }
@@ -1612,7 +1625,9 @@ kadmin_addmodpol_usage(char *func)
             _("\t\t[-maxlife time] [-minlife time] [-minlength length]\n"
               "\t\t[-minclasses number] [-history number]\n"
               "\t\t[-maxfailure number] [-failurecountinterval time]\n"
+#ifdef NOTYET
               "\t\t[-maxticketlife time] [-maxrenewlife time]\n"
+#endif
               "\t\t[-keygenenctypes enctypes]\n"));
     fprintf(stderr, _("\t\t[-lockoutduration time]\n"));
 }

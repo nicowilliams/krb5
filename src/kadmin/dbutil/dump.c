@@ -2510,6 +2510,8 @@ load_db(argc, argv)
             load = &ov_version;
         else if (!strcmp(argv[aindex], r13option))
             load = &r1_3_version;
+        else if (!strcmp(argv[aindex], r18option))
+            load = &r1_8_version;
         else if (!strcmp(argv[aindex], ipropoption)) {
             if (log_ctx && log_ctx->iproprole) {
                 load = &iprop_version;

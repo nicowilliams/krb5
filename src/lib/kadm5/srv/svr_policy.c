@@ -370,14 +370,18 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
         entry->attributes = t->attributes;
         entry->max_life = t->max_life;
         entry->max_renewable_life = t->max_renewable_life;
-        entry->keygen_enctypes = strdup(t->keygen_enctypes);
-        if (!entry->keygen_enctypes && t->keygen_enctypes) {
-            ret = ENOMEM;
-            goto cleanup;
+        if (t->keygen_enctypes) {
+            entry->keygen_enctypes = strdup(t->keygen_enctypes);
+            if (!entry->keygen_enctypes) {
+                ret = ENOMEM;
+                goto cleanup;
+            }
         }
         entry->n_tl_data = t->n_tl_data;
         entry->tl_data = t->tl_data;
     }
+
+    ret = 0;
 
 cleanup:
     if (ret) {

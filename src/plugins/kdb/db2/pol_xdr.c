@@ -42,7 +42,8 @@ xdr_osa_policy_ent_rec(XDR *xdrs, osa_policy_ent_t objp)
 	 if (!xdr_int(xdrs, &objp->version))
 	      return FALSE;
 	 if (objp->version != OSA_ADB_POLICY_VERSION_1 &&
-             objp->version != OSA_ADB_POLICY_VERSION_2)
+             objp->version != OSA_ADB_POLICY_VERSION_2 &&
+             objp->version != OSA_ADB_POLICY_VERSION_3)
 	      return FALSE;
 	 break;
     }

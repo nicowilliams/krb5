@@ -203,8 +203,8 @@ dump_version ipropx_1_version = {
     0,
     0,
     dump_k5beta7_princ_withpolicy,
-    dump_r1_8_policy,
-    process_r1_8_record,
+    dump_r1_11_policy,
+    process_r1_11_record,
 };
 
 /* External data */

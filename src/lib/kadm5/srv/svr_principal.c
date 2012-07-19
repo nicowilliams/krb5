@@ -191,7 +191,8 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
     *new_n_ks_tuple = 0;
     *new_ks_tuple = NULL;
 
-    if ((ret = kadm5_get_policy(handle->lhandle,
+    memset(&polent, 0, sizeof (polent));
+    if (policy && (ret = kadm5_get_policy(handle->lhandle,
                                 (char *)policy, &polent)) != KADM5_OK) {
         if (ret == EINVAL)
             ret = KADM5_BAD_POLICY;

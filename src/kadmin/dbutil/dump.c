@@ -234,6 +234,7 @@ static const char null_mprinc_name[] = "kdb5_dump@MISSING";
 #define trash_end_fmt     _("%s(%d): ignoring trash at end of line: ")
 #define read_nomem        _("entry (out of memory)")
 #define read_header       _("dump entry header")
+#define read_negint       _("dump entry (unexpected negative numeric field)")
 #define read_name_string  _("name string")
 #define read_key_type     _("key type")
 #define read_key_data     _("key data")
@@ -1840,6 +1841,14 @@ process_k5beta_record(fname, kcontext, filep, flags, linenop)
     return(retval);
 }
 
+#define CHECK_POSITIVE_SIZE(x)          \
+        do {                            \
+            if ((x) < 0) {              \
+                try2read = read_negint; \
+                goto cleanup;           \
+            }                           \
+        } while (0)
+
 /*
  * process_k5beta6_record()     - Handle a dump record in krb5b6 format.
  *
@@ -1853,7 +1862,6 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     krb5_db_entry       *dbentry;
     krb5_int32          t1, t2, t3, t4, t5, t6, t7, t8, t9;
     int                 nread;
-    int                 error = 1;
     int                 i, j;
     char                *name;
     krb5_key_data       *kp, *kdatap;
@@ -1872,7 +1880,6 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     op = NULL;
     nread = fscanf(filep, "%d\t%d\t%d\t%d\t%d\t", &t1, &t2, &t3, &t4, &t5);
     if (nread == EOF) {
-        error = 0;
         retval = -1;
         goto cleanup;
     }
@@ -1880,6 +1887,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
         goto cleanup;
 
     /* Get memory for flattened principal name */
+    CHECK_POSITIVE_SIZE(t2);
     if (!(name = malloc(t2 + 1)))
         goto cleanup;
 
@@ -1894,10 +1902,12 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     }
 
     /* Get memory for key list */
+    CHECK_POSITIVE_SIZE(t4);
     if (t4 && !(kp = malloc(t4*sizeof(krb5_key_data))))
         goto cleanup;
 
     /* Get memory for extra data */
+    CHECK_POSITIVE_SIZE(t5);
     if (t5 && !(op = malloc(t5)))
         goto cleanup;
 
@@ -1976,6 +1986,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
                 }
                 continue;
             }
+            CHECK_POSITIVE_SIZE(t2);
             if (!(tl->tl_data_contents = malloc(t2 + 1)) ||
                 read_octet_string(filep, tl->tl_data_contents, t2)) {
                 try2read = read_nomem;
@@ -2039,6 +2050,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
                     }
                     continue;
                 }
+                CHECK_POSITIVE_SIZE(t4);
                 if (!(kdatap->key_data_contents[j] = malloc(t4 + 1)) ||
                     read_octet_string(filep,
                                       kdatap->key_data_contents[j], t4)) {
@@ -2082,10 +2094,9 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     if (flags & FLAG_VERBOSE)
         fprintf(stderr, add_princ_fmt, name);
     retval = 0;
-    error = 0;
 
 cleanup:
-    if (error) {
+    if (retval > 0) {
         fprintf(stderr, read_err_fmt, fname, *linenop, try2read);
 
         /* Just in case our caller should want to skip this entry */

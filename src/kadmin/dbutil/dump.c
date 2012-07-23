@@ -714,6 +714,26 @@ dump_k5beta6_iterator(ptr, entry)
     return dump_k5beta6_iterator_ext(ptr, entry, 0);
 }
 
+static void
+dump_tl_data(FILE *ofile, krb5_tl_data *tlp, int is_princ, int kadm)
+{
+    int i;
+
+    for (; tlp; tlp = tlp->tl_data_next) {
+        if (is_princ && tlp->tl_data_type == KRB5_TL_KADM_DATA && !kadm)
+            continue;
+        fprintf(ofile, "%d\t%d\t",
+                (int) tlp->tl_data_type,
+                (int) tlp->tl_data_length);
+        if (tlp->tl_data_length)
+            for (i = 0; i < tlp->tl_data_length; i++)
+                fprintf(ofile, "%02x", tlp->tl_data_contents[i]);
+        else
+            fprintf(ofile, "%d", -1);
+        fprintf(ofile, "\t");
+    }
+}
+
 static krb5_error_code
 dump_k5beta6_iterator_ext(ptr, entry, kadm)
     krb5_pointer        ptr;
@@ -818,21 +838,9 @@ dump_k5beta6_iterator_ext(ptr, entry, kadm)
                     (arg->flags & FLAG_OMIT_NRA) ? 0 : entry->last_success,
                     (arg->flags & FLAG_OMIT_NRA) ? 0 : entry->last_failed,
                     (arg->flags & FLAG_OMIT_NRA) ? 0 : entry->fail_auth_count);
-            /* Pound out tagged data. */
-            for (tlp = entry->tl_data; tlp; tlp = tlp->tl_data_next) {
-                if (tlp->tl_data_type == KRB5_TL_KADM_DATA && !kadm)
-                    continue; /* see above, [krb5-admin/89] */
 
-                fprintf(arg->ofile, "%d\t%d\t",
-                        (int) tlp->tl_data_type,
-                        (int) tlp->tl_data_length);
-                if (tlp->tl_data_length)
-                    for (i=0; i<tlp->tl_data_length; i++)
-                        fprintf(arg->ofile, "%02x", tlp->tl_data_contents[i]);
-                else
-                    fprintf(arg->ofile, "%d", -1);
-                fprintf(arg->ofile, "\t");
-            }
+            /* Pound out tagged data. */
+            dump_tl_data(arg->ofile, entry->tl_data, 1, kadm);
 
             /* Pound out key data */
             for (counter=0; counter<entry->n_key_data; counter++) {
@@ -967,8 +975,6 @@ void dump_r1_8_policy(void *data, osa_policy_ent_t entry)
 void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
 {
     struct dump_args *arg;
-    krb5_tl_data     *tlp;
-    int              i;
 
     arg = (struct dump_args *) data;
     fprintf(arg->ofile,
@@ -983,17 +989,7 @@ void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
             entry->keygen_enctypes ? entry->keygen_enctypes : "-",
             entry->n_tl_data);
 
-    for (tlp = entry->tl_data; tlp; tlp = tlp->tl_data_next) {
-        fprintf(arg->ofile, "%d\t%d\t",
-                (int) tlp->tl_data_type,
-                (int) tlp->tl_data_length);
-        if (tlp->tl_data_length)
-            for (i=0; i<tlp->tl_data_length; i++)
-                fprintf(arg->ofile, "%02x", tlp->tl_data_contents[i]);
-        else
-            fprintf(arg->ofile, "%d", -1);
-        fprintf(arg->ofile, "\t");
-    }
+    dump_tl_data(arg->ofile, entry->tl_data, 0, 0);
     fprintf(arg->ofile, "\n");
 }
 

@@ -1846,7 +1846,8 @@ process_k5beta_record(fname, kcontext, filep, flags, linenop)
  * Returns -1 for end of file, 0 for success and 1 for failure.
  */
 static int
-process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep, int flags, int *linenop)
+process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
+                       int flags, int *linenop)
 {
     int                 retval = 1;
     krb5_db_entry       *dbentry;
@@ -1875,10 +1876,8 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep, int flag
         retval = -1;
         goto cleanup;
     }
-    if (nread != 5) {
-        retval = 1;
+    if (nread != 5)
         goto cleanup;
-    }
 
     /* Get memory for flattened principal name */
     if (!(name = malloc(t2 + 1)))
@@ -1907,12 +1906,12 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep, int flag
     dbentry->e_length = t5;
 
     if (kp) {
-        memset(kp, 0, (t4*sizeof(krb5_key_data)));
+        memset(kp, 0, t4*sizeof(krb5_key_data));
         dbentry->key_data = kp;
         kp = NULL;
     }
     if (op) {
-        memset(op, 0, (size_t) t5);
+        memset(op, 0, t5);
         dbentry->e_data = op;
         op = NULL;
     }
@@ -2017,7 +2016,8 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep, int flag
             kdatap = &dbentry->key_data[i];
             nread = fscanf(filep, "%d\t%d\t", &t1, &t2);
             if (nread != 2)
-                continue; /* XXX Er, really?  goto cleanup instead? */
+                /* XXX Er, really?  was so in the original; leaving it so */
+                continue;
 
             kdatap->key_data_ver = (krb5_int16) t1;
             kdatap->key_data_kvno = (krb5_int16) t2;
@@ -2076,17 +2076,21 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep, int flag
     if ((kret = krb5_db_put_principal(kcontext, dbentry))) {
         fprintf(stderr, store_err_fmt, fname, *linenop, name,
                 error_message(kret));
-    } else {
-        if (flags & FLAG_VERBOSE)
-            fprintf(stderr, add_princ_fmt, name);
-        retval = 0;
+        goto cleanup;
     }
 
+    if (flags & FLAG_VERBOSE)
+        fprintf(stderr, add_princ_fmt, name);
+    retval = 0;
     error = 0;
 
 cleanup:
-    if (error)
+    if (error) {
         fprintf(stderr, read_err_fmt, fname, *linenop, try2read);
+
+        /* Just in case our caller should want to skip this entry */
+        (void) fscanf(filep, "%*[^\n]");
+    }
 
     if (op)
         free(op);
@@ -2096,7 +2100,7 @@ cleanup:
         free(name);
     krb5_db_free_principal(kcontext, dbentry);
 
-    return(retval);
+    return retval;
 }
 
 static int

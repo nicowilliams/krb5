@@ -1837,6 +1837,22 @@ process_k5beta_record(fname, kcontext, filep, flags, linenop)
     return(retval);
 }
 
+static int
+alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
+{
+    krb5_tl_data **tlp = tldp;
+    int i;
+
+    for (i = 0; i < n_tl_data; i++) {
+        if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL)
+            return ENOMEM; /* caller cleans up */
+        memset(*tlp, 0, sizeof(krb5_tl_data));
+        tlp = &((*tlp)->tl_data_next);
+    }
+
+    return 0;
+}
+
 #define CHECK_POSITIVE_SIZE(x)          \
         do {                            \
             if ((x) < 0) {              \
@@ -1861,7 +1877,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     int                 i, j;
     char                *name;
     krb5_key_data       *kp, *kdatap;
-    krb5_tl_data        **tlp, *tl;
+    krb5_tl_data        *tl;
     krb5_octet          *op;
     krb5_error_code     kret;
     const char          *try2read = read_header;
@@ -1888,14 +1904,9 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
         goto cleanup;
 
     /* Get memory for and form tagged data linked list */
-    tlp = &dbentry->tl_data;
-    for (i = 0; i < t3; i++) {
-        if (!(*tlp = malloc(sizeof(krb5_tl_data))))
-            goto cleanup;
-        memset(*tlp, 0, sizeof(krb5_tl_data));
-        tlp = &((*tlp)->tl_data_next);
-        dbentry->n_tl_data++;
-    }
+    if (alloc_tl_data(t3, &dbentry->tl_data))
+        goto cleanup;
+    dbentry->n_tl_data = t3;
 
     /* Get memory for key list */
     CHECK_POSITIVE_SIZE(t4);
@@ -2110,6 +2121,8 @@ cleanup:
     return retval;
 }
 
+#undef CHECK_POSITIVE_SIZE
+
 static int
 process_k5beta7_policy(fname, kcontext, filep, flags, linenop)
     char                *fname;
@@ -2208,12 +2221,12 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
                      int flags, int *linenop)
 {
     osa_policy_ent_rec    rec;
-    krb5_tl_data        **tlp, *tl, *tl_next;
+    krb5_tl_data         *tl, *tl_next;
     char                  namebuf[1024];
     char                  keygenbuf[256];
     int                   nread;
     int                   ret = 0;
-    krb5_int32            i, t1, t2;
+    krb5_int32            t1, t2;
     const char           *try2read = NULL;
 
     memset(&rec, 0, sizeof(rec));
@@ -2249,15 +2262,9 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
         rec.keygen_enctypes = NULL;
 
     /* Get TL data */
-    tlp = &rec.tl_data;
-    for (i = 0; i < rec.n_tl_data; i++) {
-        if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL) {
-            ret = ENOMEM;
-            goto cleanup;
-        }
-        memset(*tlp, 0, sizeof(krb5_tl_data));
-        tlp = &((*tlp)->tl_data_next);
-    }
+    if ((ret = alloc_tl_data(rec.n_tl_data, &rec.tl_data)))
+        goto cleanup;
+
     ret = EINVAL;
     for (tl = rec.tl_data; tl; tl = tl->tl_data_next) {
         nread = fscanf(filep, "%d\t%d\t", &t1, &t2);

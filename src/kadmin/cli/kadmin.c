@@ -1604,7 +1604,7 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
             }
             free(ks_tuple);
             policy->allowed_keysalts = argv[i];
-            *mask |= KADM5_POLICY_KEYGEN_ENCTYPES;
+            *mask |= KADM5_POLICY_ALLOWED_KEYSALTS;
             continue;
         } else
             return -1;

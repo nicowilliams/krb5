@@ -128,7 +128,7 @@ typedef long            kadm5_ret_t;
 #define KADM5_POLICY_ATTRIBUTES         0x00800000
 #define KADM5_POLICY_MAX_LIFE           0x01000000
 #define KADM5_POLICY_MAX_RLIFE          0x02000000
-#define KADM5_POLICY_KEYGEN_ENCTYPES    0x04000000
+#define KADM5_POLICY_ALLOWED_KEYSALTS   0x04000000
 #define KADM5_POLICY_TL_DATA            0x08000000
 
 /* kadm5_config_params */

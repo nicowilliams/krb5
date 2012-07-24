@@ -229,7 +229,7 @@ typedef struct _kadm5_policy_ent_t {
     krb5_flags      attributes;
     krb5_deltat     max_life;
     krb5_deltat     max_renewable_life;
-    char            *keygen_enctypes;
+    char            *allowed_keysalts;
     krb5_int16      n_tl_data;
     krb5_tl_data    *tl_data;
 } kadm5_policy_ent_rec, *kadm5_policy_ent_t;

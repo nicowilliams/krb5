@@ -224,7 +224,7 @@ typedef struct _osa_policy_ent_t {
     krb5_ui_4       attributes;
     krb5_ui_4       max_life;
     krb5_ui_4       max_renewable_life;
-    char          * keygen_enctypes;
+    char          * allowed_keysalts;
     krb5_int16      n_tl_data;
     krb5_tl_data  * tl_data;
 } osa_policy_ent_rec, *osa_policy_ent_t;
@@ -239,7 +239,7 @@ typedef struct __krb5_key_salt_tuple {
 #define KRB5_KDB_MAGIC_NUMBER           0xdbdbdbdb
 #define KRB5_KDB_V1_BASE_LENGTH         38
 
-#define KRB5_KDB_MAX_KG_ENCTYPES_LEN    512
+#define KRB5_KDB_MAX_ALLOWED_KS_LEN     512
 
 #define KRB5_TL_LAST_PWD_CHANGE         0x0001
 #define KRB5_TL_MOD_PRINC               0x0002

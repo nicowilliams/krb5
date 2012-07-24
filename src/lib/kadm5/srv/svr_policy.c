@@ -152,9 +152,9 @@ kadm5_create_policy_internal(void *server_handle,
         else
             pent.max_renewable_life = entry->max_renewable_life;
         if (!(mask & KADM5_POLICY_KEYGEN_ENCTYPES))
-            pent.keygen_enctypes = 0;
+            pent.allowed_keysalts = 0;
         else
-            pent.keygen_enctypes = entry->keygen_enctypes;
+            pent.allowed_keysalts = entry->allowed_keysalts;
         if (!(mask & KADM5_POLICY_TL_DATA)) {
             pent.n_tl_data = 0;
             pent.tl_data = NULL;
@@ -354,7 +354,7 @@ kadm5_modify_policy_internal(void *server_handle,
         if ((mask & KADM5_POLICY_MAX_RLIFE))
             p->max_renewable_life = entry->max_renewable_life;
         if ((mask & KADM5_POLICY_KEYGEN_ENCTYPES) &&
-            !(p->keygen_enctypes = strdup(entry->keygen_enctypes))) {
+            !(p->allowed_keysalts = strdup(entry->allowed_keysalts))) {
             ret = ENOMEM;
             goto cleanup;
         }
@@ -414,9 +414,9 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
         entry->attributes = t->attributes;
         entry->max_life = t->max_life;
         entry->max_renewable_life = t->max_renewable_life;
-        if (t->keygen_enctypes) {
-            entry->keygen_enctypes = strdup(t->keygen_enctypes);
-            if (!entry->keygen_enctypes) {
+        if (t->allowed_keysalts) {
+            entry->allowed_keysalts = strdup(t->allowed_keysalts);
+            if (!entry->allowed_keysalts) {
                 ret = ENOMEM;
                 goto cleanup;
             }

@@ -626,7 +626,7 @@ The following options are available:
     occur without the specified failure count interval elapsing.
     A duration of 0 means forever.
 
-**keygen_enctypes**
+**-allowedkeysalts**
     Specifies the key/salt tuples supported for long-term keys when
     setting or changing a principal's password/keys.  See
     :ref:`Encryption_and_salt_types` in :ref:`kdc.conf(5)` for a list

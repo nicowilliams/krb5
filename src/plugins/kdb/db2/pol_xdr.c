@@ -15,7 +15,7 @@ osa_policy_min_vers(osa_policy_ent_t objp)
     if (objp->attributes ||
         objp->max_life ||
         objp->max_renewable_life ||
-        objp->keygen_enctypes ||
+        objp->allowed_keysalts ||
         objp->n_tl_data)
         return OSA_ADB_POLICY_VERSION_3;
 
@@ -77,7 +77,8 @@ xdr_osa_policy_ent_rec(XDR *xdrs, osa_policy_ent_t objp)
 	    return (FALSE);
         if (!xdr_u_int32(xdrs, &objp->max_renewable_life))
 	    return (FALSE);
-        if (!xdr_string(xdrs, &objp->keygen_enctypes, KRB5_KDB_MAX_KG_ENCTYPES_LEN))
+        if (!xdr_string(xdrs, &objp->allowed_keysalts,
+                        KRB5_KDB_MAX_ALLOWED_KS_LEN))
 	    return (FALSE);
         if (!xdr_short(xdrs, &objp->n_tl_data))
             return (FALSE);

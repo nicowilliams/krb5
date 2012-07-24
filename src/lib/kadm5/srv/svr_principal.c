@@ -183,8 +183,8 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
 {
     kadm5_ret_t ret;
     kadm5_policy_ent_rec        polent;
-    int kg_n_ks_tuple = 0;
-    krb5_key_salt_tuple *kg_ks_tuple = NULL;
+    int ak_n_ks_tuple = 0;
+    krb5_key_salt_tuple *ak_ks_tuple = NULL;
     int i, k;
     int allowed = 0;
 
@@ -200,29 +200,29 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
             goto cleanup;
     }
 
-    if (polent.keygen_enctypes) {
-        ret = krb5_string_to_keysalts(polent.keygen_enctypes,
+    if (polent.allowed_keysalts) {
+        ret = krb5_string_to_keysalts(polent.allowed_keysalts,
                                       ", \t",/* Tuple separators */
                                       ":.-", /* Key/salt separators */
                                       0,     /* No duplicates */
-                                      &kg_ks_tuple,
-                                      &kg_n_ks_tuple);
+                                      &ak_ks_tuple,
+                                      &ak_n_ks_tuple);
         /* Malformed policy?  Let the admin know so they can fix it. */
         if (ret)
             return ret;
 
         /* Have policy but no ks_tuple input?  Output the policy. */
         if (n_ks_tuple == 0) {
-            *new_n_ks_tuple = kg_n_ks_tuple;
-            *new_ks_tuple = kg_ks_tuple;
+            *new_n_ks_tuple = ak_n_ks_tuple;
+            *new_ks_tuple = ak_ks_tuple;
             return 0;
         }
     }
 
     /* Check that the requested ks_tuple is within policy, if we have one. */
-    for (i = 0; i >= 0 && i < n_ks_tuple && kg_n_ks_tuple; i++, allowed = 0) {
-        for (k = 0; k >= 0 && k < kg_n_ks_tuple && !allowed; k++) {
-            if (ks_tuple[i].ks_enctype == kg_ks_tuple[k].ks_enctype)
+    for (i = 0; i >= 0 && i < n_ks_tuple && ak_n_ks_tuple; i++, allowed = 0) {
+        for (k = 0; k >= 0 && k < ak_n_ks_tuple && !allowed; k++) {
+            if (ks_tuple[i].ks_enctype == ak_ks_tuple[k].ks_enctype)
                 allowed = 1;
         }
         if (!allowed) {
@@ -233,42 +233,42 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
 
     /*
      * Now filter new_ks_tuple by ks_tuple so as to preserve the
-     * keygen_enctypes relative ordering, though we ignore the salt
+     * allowed_keysalts relative ordering, though we ignore the salt
      * type in this filtering.
      */
-    if (kg_n_ks_tuple) {
-        krb5_key_salt_tuple *kg_ks_tuple_subset;
+    if (ak_n_ks_tuple) {
+        krb5_key_salt_tuple *ak_ks_tuple_subset;
         int m;
 
-        kg_ks_tuple_subset = calloc(n_ks_tuple,
-                                     sizeof (*kg_ks_tuple_subset));
-        if (!kg_ks_tuple_subset) {
+        ak_ks_tuple_subset = calloc(n_ks_tuple,
+                                     sizeof (*ak_ks_tuple_subset));
+        if (!ak_ks_tuple_subset) {
             ret = ENOMEM;
             goto cleanup;
         }
         for (m = 0, i = 0;
-             i >= 0 && i < kg_n_ks_tuple && m < n_ks_tuple;
+             i >= 0 && i < ak_n_ks_tuple && m < n_ks_tuple;
              i++) {
             for (k = 0; k < n_ks_tuple; k++) {
-                if (kg_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype &&
-                    kg_ks_tuple[i].ks_salttype == ks_tuple[k].ks_salttype)
-                    kg_ks_tuple_subset[m++] = kg_ks_tuple[i];
+                if (ak_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype &&
+                    ak_ks_tuple[i].ks_salttype == ks_tuple[k].ks_salttype)
+                    ak_ks_tuple_subset[m++] = ak_ks_tuple[i];
             }
         }
         if (m < n_ks_tuple) {
             /* Do it again, but this time ignore salttypes */
             for (m = 0, i = 0;
-                 i >= 0 && i < kg_n_ks_tuple && m < n_ks_tuple;
+                 i >= 0 && i < ak_n_ks_tuple && m < n_ks_tuple;
                  i++) {
                 for (k = 0; k < n_ks_tuple; k++) {
-                    if (kg_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype)
-                        kg_ks_tuple_subset[m++] = kg_ks_tuple[i];
+                    if (ak_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype)
+                        ak_ks_tuple_subset[m++] = ak_ks_tuple[i];
                 }
             }
         }
-        free(kg_ks_tuple);
-        kg_ks_tuple = kg_ks_tuple_subset;
-        kg_n_ks_tuple = n_ks_tuple;
+        free(ak_ks_tuple);
+        ak_ks_tuple = ak_ks_tuple_subset;
+        ak_n_ks_tuple = n_ks_tuple;
     }
 
     /*
@@ -286,15 +286,15 @@ check_and_set_ks_tuple_policy(kadm5_server_handle_t handle,
         ret = ENOMEM;
         goto cleanup;
     }
-    if (kg_n_ks_tuple)
-        memcpy(*new_ks_tuple, kg_ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
+    if (ak_n_ks_tuple)
+        memcpy(*new_ks_tuple, ak_ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
     else
         memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof (**new_ks_tuple));
     *new_n_ks_tuple = n_ks_tuple;
     ret = 0;
 
 cleanup:
-    free(kg_ks_tuple);
+    free(ak_ks_tuple);
     return ret;
 }
 

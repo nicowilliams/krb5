@@ -1589,7 +1589,7 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
             policy->max_renewable_life = date - now;
             *mask |= KADM5_POLICY_MAX_RLIFE;
             continue;
-        } else if (!strcmp(argv[i], "-keygenenctypes")) {
+        } else if (!strcmp(argv[i], "-allowedkeysalts")) {
             krb5_key_salt_tuple *ks_tuple = NULL;
             int n_ks_tuple = 0;
 
@@ -1603,7 +1603,7 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
                 return -1;
             }
             free(ks_tuple);
-            policy->keygen_enctypes = argv[i];
+            policy->allowed_keysalts = argv[i];
             *mask |= KADM5_POLICY_KEYGEN_ENCTYPES;
             continue;
         } else
@@ -1628,7 +1628,7 @@ kadmin_addmodpol_usage(char *func)
 #ifdef NOTYET
               "\t\t[-maxticketlife time] [-maxrenewlife time]\n"
 #endif
-              "\t\t[-keygenenctypes enctypes]\n"));
+              "\t\t[-allowedkeysalts keysalts]\n"));
     fprintf(stderr, _("\t\t[-lockoutduration time]\n"));
 }
 

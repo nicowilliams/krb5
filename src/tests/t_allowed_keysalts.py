@@ -12,51 +12,51 @@ krb5_conf1 = {'all': {'libdefaults': {
 realm = K5Realm(krb5_conf=krb5_conf1, create_host=False, get_creds=False)
 
 # Add policies
-realm.run_kadminl('addpol -keygenenctypes aes256-cts:normal kg1')
-realm.run_kadminl('addpol -keygenenctypes aes256-cts:normal,rc4-hmac:normal kg2')
+realm.run_kadminl('addpol -allowedkeysalts aes256-cts:normal ak1')
+realm.run_kadminl('addpol -allowedkeysalts aes256-cts:normal,rc4-hmac:normal ak2')
 
 realm.run_kadminl('addprinc -randkey -e aes256-cts:normal server')
 
-# Test with one-enctype keygen_enctypes
-realm.run_kadminl('modprinc -policy kg1 server')
+# Test with one-enctype allowed_keysalts
+realm.run_kadminl('modprinc -policy ak1 server')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e aes128-cts:normal server')
 if not re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e aes256-cts:normal server')
 if re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 
-# Now test a multi-enctype keygen_enctypes.  Test that subsets are allowed,
+# Now test a multi-enctype allowed_keysalts.  Test that subsets are allowed,
 # the the complete set is allowed, that order doesn't matter, and that
 # enctypes outside the set are not allowed.
-realm.run_kadminl('modprinc -policy kg2 server')
+realm.run_kadminl('modprinc -policy ak2 server')
 output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal server')
 if re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e aes256-cts:normal server')
 if re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal,aes256-cts:normal server')
 if re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e aes256-cts:normal,rc4-hmac:normal server')
 if re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal,aes128-cts:normal server')
 if not re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal,aes256-cts:normal,aes128-cts:normal server')
 if not re.search(output):
-    fail('keygen_enctypes policy not applied properly')
+    fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
 realm.stop()
 
-success('keygen_enctypes')
+success('allowed_keysalts')

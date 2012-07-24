@@ -990,7 +990,7 @@ void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
             entry->policy_refcnt, entry->pw_max_fail,
             entry->pw_failcnt_interval, entry->pw_lockout_duration,
             entry->attributes, entry->max_life, entry->max_renewable_life,
-            entry->keygen_enctypes ? entry->keygen_enctypes : "-",
+            entry->allowed_keysalts ? entry->allowed_keysalts : "-",
             entry->n_tl_data);
 
     dump_tl_data(arg->ofile, entry->tl_data, 0, 0);
@@ -2245,7 +2245,7 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     osa_policy_ent_rec    rec;
     krb5_tl_data         *tl, *tl_next;
     char                  namebuf[1024];
-    char                  keygenbuf[KRB5_KDB_MAX_KG_ENCTYPES_LEN + 1];
+    char                  keysaltbuf[KRB5_KDB_MAX_ALLOWED_KS_LEN + 1];
     int                   nread;
     int                   ret = 0;
     const char           *try2read = NULL;
@@ -2254,7 +2254,7 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
 
     (*linenop)++;
     rec.name = namebuf;
-    rec.keygen_enctypes = keygenbuf;
+    rec.allowed_keysalts = keysaltbuf;
 
     /*
      * To make this compatible with future policy extensions, we
@@ -2263,7 +2263,7 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     nread = fscanf(filep,
                    "%1023s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
                    "%d\t%d\t%d\t"
-                   K5CONST_WIDTH_SCANF_STR(KRB5_KDB_MAX_KG_ENCTYPES_LEN)
+                   K5CONST_WIDTH_SCANF_STR(KRB5_KDB_MAX_ALLOWED_KS_LEN)
                    "\n%hd",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
@@ -2272,7 +2272,7 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
                    &rec.pw_max_fail, &rec.pw_failcnt_interval,
                    &rec.pw_lockout_duration,
                    &rec.attributes, &rec.max_life, &rec.max_renewable_life,
-                   rec.keygen_enctypes, &rec.n_tl_data);
+                   rec.allowed_keysalts, &rec.n_tl_data);
     if (nread == EOF)
         return -1;
     else if (nread != 15) {
@@ -2281,8 +2281,8 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
         return 1;
     }
 
-    if (rec.keygen_enctypes && !strcmp(rec.keygen_enctypes, "-"))
-        rec.keygen_enctypes = NULL;
+    if (rec.allowed_keysalts && !strcmp(rec.allowed_keysalts, "-"))
+        rec.allowed_keysalts = NULL;
 
     /* Get TL data */
     if ((ret = alloc_tl_data(rec.n_tl_data, &rec.tl_data)))

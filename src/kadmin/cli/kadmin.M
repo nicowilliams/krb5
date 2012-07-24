@@ -734,7 +734,7 @@ authenticating if too many authentication failures occur without the
 specified failure count interval elapsing.  A duration of 0 means
 forever.
 .TP
-\fB\-keygenenctypes\fP \fIkeysalttypes\fP
+\fB\-allowedkeysalts\fP \fIkeysalttypes\fP
 sets the key/salt types that the principal is allowed to have keys
 for in order of preference.  The principal will be allowed keys of
 any subset of these key/salt types.  The principal's new keys in

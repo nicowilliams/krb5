@@ -499,7 +499,7 @@ _xdr_kadm5_policy_ent_rec(XDR *xdrs, kadm5_policy_ent_rec *objp, int vers)
 		objp->attributes = 0;
 		objp->max_life = 0;
 		objp->max_renewable_life = 0;
-		objp->keygen_enctypes = NULL;
+		objp->allowed_keysalts = NULL;
 		objp->n_tl_data = 0;
 		objp->tl_data = NULL;
 	}
@@ -522,7 +522,7 @@ _xdr_kadm5_policy_ent_rec(XDR *xdrs, kadm5_policy_ent_rec *objp, int vers)
 		if (!xdr_krb5_deltat(xdrs, &objp->max_renewable_life)) {
 			return (FALSE);
 		}
-		if (!xdr_nullstring(xdrs, &objp->keygen_enctypes)) {
+		if (!xdr_nullstring(xdrs, &objp->allowed_keysalts)) {
 			return (FALSE);
 		}
 		if (!xdr_krb5_int16(xdrs, &objp->n_tl_data)) {

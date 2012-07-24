@@ -241,6 +241,46 @@ kadm5_modify_policy(void *server_handle,
         return kadm5_modify_policy_internal(server_handle, entry, mask);
 }
 
+static int
+alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
+{
+    krb5_tl_data **tlp = tldp;
+    int i;
+
+    for (i = 0; i < n_tl_data; i++) {
+        if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL)
+            return ENOMEM; /* caller cleans up */
+        memset(*tlp, 0, sizeof(krb5_tl_data));
+        tlp = &((*tlp)->tl_data_next);
+    }
+
+    return 0;
+}
+
+static kadm5_ret_t
+copy_tl_data(krb5_int16 n_tl_data, krb5_tl_data *tl_data,
+             krb5_tl_data **out)
+{
+    kadm5_ret_t ret;
+    krb5_tl_data *tl, *tl_new;
+
+    if ((ret = alloc_tl_data(n_tl_data, out)))
+        return ret; /* caller cleans up */
+
+    tl = tl_data;
+    tl_new = *out;
+    for (; tl; tl = tl->tl_data_next, tl_new = tl_new->tl_data_next) {
+        if (!(tl_new->tl_data_contents = malloc(tl->tl_data_length)))
+            return ENOMEM;
+        memcpy(tl_new->tl_data_contents, tl->tl_data_contents,
+               tl->tl_data_length);
+        tl_new->tl_data_type = tl->tl_data_type;
+        tl_new->tl_data_length = tl->tl_data_length;
+    }
+
+    return 0;
+}
+
 kadm5_ret_t
 kadm5_modify_policy_internal(void *server_handle,
                              kadm5_policy_ent_t entry, long mask)
@@ -313,17 +353,21 @@ kadm5_modify_policy_internal(void *server_handle,
             p->max_life = entry->max_life;
         if ((mask & KADM5_POLICY_MAX_RLIFE))
             p->max_renewable_life = entry->max_renewable_life;
-        if ((mask & KADM5_POLICY_KEYGEN_ENCTYPES))
-            p->keygen_enctypes = entry->keygen_enctypes;
+        if ((mask & KADM5_POLICY_KEYGEN_ENCTYPES) &&
+            !(p->keygen_enctypes = strdup(entry->keygen_enctypes))) {
+            ret = ENOMEM;
+            goto cleanup;
+        }
         if ((mask & KADM5_POLICY_TL_DATA)) {
+            if ((ret = copy_tl_data(entry->n_tl_data, entry->tl_data,
+                                    &p->tl_data)))
+                goto cleanup;
             p->n_tl_data = entry->n_tl_data;
-            p->tl_data = entry->tl_data;
         }
     }
     ret = krb5_db_put_policy(handle->context, p);
-    p->keygen_enctypes = NULL;
-    p->n_tl_data = 0;
-    p->tl_data = NULL;
+
+cleanup:
     krb5_db_free_policy(handle->context, p);
     return ret;
 }
@@ -377,17 +421,16 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
                 goto cleanup;
             }
         }
+        if ((ret = copy_tl_data(t->n_tl_data, t->tl_data, &entry->tl_data)))
+            goto cleanup;
         entry->n_tl_data = t->n_tl_data;
-        entry->tl_data = t->tl_data;
     }
 
     ret = 0;
 
 cleanup:
-    if (ret) {
-        free(entry->keygen_enctypes);
-        free(entry->policy);
-    }
+    if (ret)
+        kadm5_free_policy_ent(handle, entry);
     krb5_db_free_policy(handle->context, t);
-    return KADM5_OK;
+    return ret;
 }

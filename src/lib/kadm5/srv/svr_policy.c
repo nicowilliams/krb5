@@ -384,27 +384,28 @@ kadm5_modify_policy_internal(void *server_handle,
             p->max_life = entry->max_life;
         if ((mask & KADM5_POLICY_MAX_RLIFE))
             p->max_renewable_life = entry->max_renewable_life;
-        if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) &&
-            !(p->allowed_keysalts = strdup(entry->allowed_keysalts))) {
-            ret = ENOMEM;
-            goto cleanup;
+        if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS)) {
+            krb5_db_free(handle->context, p->allowed_keysalts);
+            if (entry->allowed_keysalts) {
+                size_t len = strlen(entry->allowed_keysalts) + 1;
+
+                p->allowed_keysalts = krb5_db_alloc(handle->context, NULL,
+                                                    len);
+                if (!p->allowed_keysalts) {
+                    ret = ENOMEM;
+                    goto cleanup;
+                }
+            }
         }
         if ((mask & KADM5_POLICY_TL_DATA)) {
-            krb5_tl_data *tl_data_tail;
+            krb5_tl_data *tl;
 
-            for (tl_data_tail = entry->tl_data; tl_data_tail;
-                 tl_data_tail = tl_data_tail->tl_data_next) {
+            for (tl = entry->tl_data; tl; tl = tl->tl_data_next) {
                 if ((ret = krb5_db_update_tl_data(handle->context,
-                                                  &p->n_tl_data,
-                                                  &p->tl_data,
-                                                  tl_data_tail)))
+                                             &p->n_tl_data, &p->tl_data,
+                                             tl)))
                     goto cleanup;
             }
-
-            if ((ret = copy_tl_data(entry->n_tl_data, entry->tl_data,
-                                    &p->tl_data)))
-                goto cleanup;
-            p->n_tl_data = entry->n_tl_data;
         }
     }
     ret = krb5_db_put_policy(handle->context, p);

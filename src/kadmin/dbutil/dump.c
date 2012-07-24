@@ -1853,6 +1853,45 @@ alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
     return 0;
 }
 
+static int
+proces_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data, const char **errstr)
+{
+    krb5_tl_data         *tl;
+    int                   nread;
+    krb5_int32            t1, t2;
+
+    for (tl = tl_data; tl; tl = tl->tl_data_next) {
+        nread = fscanf(filep, "%d\t%d\t", &t1, &t2);
+        if (nread != 2) {
+            *errstr = read_ttypelen;
+            return EINVAL;
+        }
+        if (t2 < 0) {
+            *errstr = read_negint;
+            return EINVAL;
+        }
+        tl->tl_data_type = (krb5_int16) t1;
+        tl->tl_data_length = (krb5_int16) t2;
+        if (tl->tl_data_length) {
+            if ((tl->tl_data_contents = malloc(t2 + 1)) == NULL)
+                return ENOMEM;
+            if (read_octet_string(filep, tl->tl_data_contents,
+                                  tl->tl_data_length)) {
+                *errstr = read_tcontents;
+                return EINVAL;
+            }
+        } else {
+            nread = fscanf(filep, "%d", &t1);
+            if ((nread != 1) || (t1 != -1)) {
+                *errstr = read_tcontents;
+                return EINVAL;
+            }
+        }
+    }
+
+    return 0;
+}
+
 #define CHECK_POSITIVE_SIZE(x)          \
         do {                            \
             if ((x) < 0) {              \
@@ -1976,32 +2015,11 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
      * that's what I did.  [krb5-admin/89]
      */
     if (dbentry->n_tl_data) {
+        if (proces_tl_data(fname, filep, dbentry->tl_data, &try2read))
+            goto cleanup;
         for (tl = dbentry->tl_data; tl; tl = tl->tl_data_next) {
-            nread = fscanf(filep, "%d\t%d\t", &t1, &t2);
-            if (nread != 2) {
-                try2read = read_ttypelen;
-                goto cleanup;
-            }
-            tl->tl_data_type = (krb5_int16) t1;
-            tl->tl_data_length = (krb5_int16) t2;
-            if (!tl->tl_data_length) {
-                /* Should be a null field */
-                nread = fscanf(filep, "%d", &t9);
-                if ((nread != 1) || (t9 != -1)) {
-                    try2read = read_tcontents;
-                    goto cleanup;
-                }
-                continue;
-            }
-            CHECK_POSITIVE_SIZE(t2);
-            if (!(tl->tl_data_contents = malloc(t2 + 1)) ||
-                read_octet_string(filep, tl->tl_data_contents, t2)) {
-                try2read = read_nomem;
-                goto cleanup;
-            }
-
             /* test to set mask fields */
-            if (t1 == KRB5_TL_KADM_DATA) {
+            if (tl->tl_data_type == KRB5_TL_KADM_DATA) {
                 XDR xdrs;
                 osa_princ_ent_rec osa_princ_ent;
 
@@ -2226,7 +2244,6 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     char                  keygenbuf[256];
     int                   nread;
     int                   ret = 0;
-    krb5_int32            t1, t2;
     const char           *try2read = NULL;
 
     memset(&rec, 0, sizeof(rec));
@@ -2265,33 +2282,8 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     if ((ret = alloc_tl_data(rec.n_tl_data, &rec.tl_data)))
         goto cleanup;
 
-    ret = EINVAL;
-    for (tl = rec.tl_data; tl; tl = tl->tl_data_next) {
-        nread = fscanf(filep, "%d\t%d\t", &t1, &t2);
-        if (nread != 2) {
-            try2read = read_ttypelen;
-            goto cleanup;
-        }
-        tl->tl_data_type = (krb5_int16) t1;
-        tl->tl_data_length = (krb5_int16) t2;
-        if (tl->tl_data_length) {
-            if ((tl->tl_data_contents = malloc(t2 + 1)) == NULL) {
-                ret = ENOMEM;
-                goto cleanup;
-            }
-            if (read_octet_string(filep, tl->tl_data_contents,
-                                  tl->tl_data_length)) {
-                try2read = read_tcontents;
-                goto cleanup;
-            }
-        } else {
-            nread = fscanf(filep, "%d", &t1);
-            if ((nread != 1) || (t1 != -1)) {
-                try2read = read_tcontents;
-                break;
-            }
-        }
-    }
+    if ((ret = proces_tl_data(fname, filep, rec.tl_data, &try2read)))
+        goto cleanup;
     (void) fscanf(filep, "%*[^\n]"); /* Just in case! */
 
     if ((ret = krb5_db_create_policy(kcontext, &rec))) {

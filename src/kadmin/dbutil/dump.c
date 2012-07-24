@@ -194,7 +194,7 @@ dump_version r1_8_version = {
 };
 dump_version r1_11_version = {
     "Kerberos version 5 release 1.11",
-    "kdb5_util load_dump version 6\n",
+    "kdb5_util load_dump version 7\n",
     0,
     0,
     dump_k5beta7_princ_withpolicy,
@@ -726,7 +726,7 @@ dump_tl_data(FILE *ofile, krb5_tl_data *tlp, int is_princ, int kadm)
     for (; tlp; tlp = tlp->tl_data_next) {
         if (is_princ && tlp->tl_data_type == KRB5_TL_KADM_DATA && !kadm)
             continue;
-        fprintf(ofile, "%d\t%d\t",
+        fprintf(ofile, "\t%d\t%d\t",
                 (int) tlp->tl_data_type,
                 (int) tlp->tl_data_length);
         if (tlp->tl_data_length)
@@ -734,7 +734,6 @@ dump_tl_data(FILE *ofile, krb5_tl_data *tlp, int is_princ, int kadm)
                 fprintf(ofile, "%02x", tlp->tl_data_contents[i]);
         else
             fprintf(ofile, "%d", -1);
-        fprintf(ofile, "\t");
     }
 }
 
@@ -833,7 +832,7 @@ dump_k5beta6_iterator_ext(ptr, entry, kadm)
                     (int) entry->n_key_data,
                     (int) entry->e_length,
                     name);
-            fprintf(arg->ofile, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t",
+            fprintf(arg->ofile, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d",
                     entry->attributes,
                     entry->max_life,
                     entry->max_renewable_life,
@@ -845,6 +844,7 @@ dump_k5beta6_iterator_ext(ptr, entry, kadm)
 
             /* Pound out tagged data. */
             dump_tl_data(arg->ofile, entry->tl_data, 1, kadm);
+            fprintf(arg->ofile, "\t");
 
             /* Pound out key data */
             for (counter=0; counter<entry->n_key_data; counter++) {
@@ -983,7 +983,7 @@ void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
     arg = (struct dump_args *) data;
     fprintf(arg->ofile,
             "policy\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
-            "%d\t%d\t%d\t%s\t%d\t",
+            "%d\t%d\t%d\t%s\t%d",
             entry->name,
             entry->pw_min_life, entry->pw_max_life, entry->pw_min_length,
             entry->pw_min_classes, entry->pw_history_num,

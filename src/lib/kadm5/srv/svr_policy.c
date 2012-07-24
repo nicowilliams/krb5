@@ -89,6 +89,17 @@ kadm5_create_policy_internal(void *server_handle,
         return KADM5_BAD_POLICY;
     if (!(mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
+    if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
+        krb5_key_salt_tuple *ks_tuple = NULL;
+        krb5_int32 n_ks_tuple;
+        ret = krb5_string_to_keysalts(entry->allowed_keysalts, ", \t", ":.-",
+                                      0, &ks_tuple, &n_ks_tuple);
+        free(ks_tuple);
+        if (ret == EINVAL)
+            return KADM5_BAD_KEYSALTS;
+        else if (ret)
+            return ret;
+    }
 
     pent.name = entry->policy;
     p = entry->policy;
@@ -297,6 +308,17 @@ kadm5_modify_policy_internal(void *server_handle,
         return KADM5_BAD_POLICY;
     if((mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
+    if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
+        krb5_key_salt_tuple *ks_tuple = NULL;
+        krb5_int32 n_ks_tuple;
+        ret = krb5_string_to_keysalts(entry->allowed_keysalts, ", \t", ":.-",
+                                      0, &ks_tuple, &n_ks_tuple);
+        free(ks_tuple);
+        if (ret == EINVAL)
+            return KADM5_BAD_KEYSALTS;
+        else if (ret)
+            return ret;
+    }
     if ((mask & KADM5_POLICY_TL_DATA)) {
         krb5_tl_data *tl_data_orig = entry->tl_data;
 

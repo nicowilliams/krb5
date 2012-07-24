@@ -239,6 +239,8 @@ typedef struct __krb5_key_salt_tuple {
 #define KRB5_KDB_MAGIC_NUMBER           0xdbdbdbdb
 #define KRB5_KDB_V1_BASE_LENGTH         38
 
+#define KRB5_KDB_MAX_KG_ENCTYPES_LEN    512
+
 #define KRB5_TL_LAST_PWD_CHANGE         0x0001
 #define KRB5_TL_MOD_PRINC               0x0002
 #define KRB5_TL_KADM_DATA               0x0003

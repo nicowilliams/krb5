@@ -77,7 +77,7 @@ xdr_osa_policy_ent_rec(XDR *xdrs, osa_policy_ent_t objp)
 	    return (FALSE);
         if (!xdr_u_int32(xdrs, &objp->max_renewable_life))
 	    return (FALSE);
-        if (!xdr_string(xdrs, &objp->keygen_enctypes, 256))
+        if (!xdr_string(xdrs, &objp->keygen_enctypes, KRB5_KDB_MAX_KG_ENCTYPES_LEN))
 	    return (FALSE);
         if (!xdr_short(xdrs, &objp->n_tl_data))
             return (FALSE);

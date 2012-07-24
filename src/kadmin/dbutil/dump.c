@@ -49,6 +49,10 @@ krb5_kvno                       new_mkvno;
 static int      backwards;
 static int      recursive;
 
+#define K5Q1(x)                     #x
+#define K5Q(x)                      K5Q1(x)
+#define K5CONST_WIDTH_SCANF_STR(x)  "%" K5Q(x) "s"
+
 /*
  * Use compile(3) if no regcomp present.
  */
@@ -2158,7 +2162,7 @@ process_k5beta7_policy(fname, kcontext, filep, flags, linenop)
     (*linenop)++;
     rec.name = namebuf;
 
-    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d", rec.name,
+    nread = fscanf(filep, "%1023s\t%d\t%d\t%d\t%d\t%d\t%d", rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,
                    &rec.pw_history_num, &rec.policy_refcnt);
@@ -2205,7 +2209,7 @@ process_r1_8_policy(fname, kcontext, filep, flags, linenop)
      * To make this compatible with future policy extensions, we
      * ignore any additional values.
      */
-    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d%*[^\n]",
+    nread = fscanf(filep, "%1023s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d%*[^\n]",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,
@@ -2241,7 +2245,7 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     osa_policy_ent_rec    rec;
     krb5_tl_data         *tl, *tl_next;
     char                  namebuf[1024];
-    char                  keygenbuf[256];
+    char                  keygenbuf[KRB5_KDB_MAX_KG_ENCTYPES_LEN + 1];
     int                   nread;
     int                   ret = 0;
     const char           *try2read = NULL;
@@ -2257,8 +2261,10 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
      * ignore any additional values.
      */
     nread = fscanf(filep,
-                   "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
-                   "%d\t%d\t%d\t%256s\n%hd",
+                   "%1023s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
+                   "%d\t%d\t%d\t"
+                   K5CONST_WIDTH_SCANF_STR(KRB5_KDB_MAX_KG_ENCTYPES_LEN)
+                   "\n%hd",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,

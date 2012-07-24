@@ -91,7 +91,7 @@ kadm5_create_policy_internal(void *server_handle,
         return KADM5_BAD_MASK;
     if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
         krb5_key_salt_tuple *ks_tuple = NULL;
-        krb5_int32 n_ks_tuple;
+        krb5_int32 n_ks_tuple = 0;
         ret = krb5_string_to_keysalts(entry->allowed_keysalts, ", \t", ":.-",
                                       0, &ks_tuple, &n_ks_tuple);
         free(ks_tuple);

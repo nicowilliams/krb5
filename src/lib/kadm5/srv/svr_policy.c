@@ -297,6 +297,15 @@ kadm5_modify_policy_internal(void *server_handle,
         return KADM5_BAD_POLICY;
     if((mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
+    if ((mask & KADM5_POLICY_TL_DATA)) {
+        krb5_tl_data *tl_data_orig = entry->tl_data;
+
+        while (tl_data_orig) {
+            if (tl_data_orig->tl_data_type < 256)
+                return KADM5_BAD_TL_TYPE;
+            tl_data_orig = tl_data_orig->tl_data_next;
+        }
+    }
 
     ret = krb5_db_get_policy(handle->context, entry->policy, &p);
     if (ret == KRB5_KDB_NOENTRY)
@@ -346,6 +355,9 @@ kadm5_modify_policy_internal(void *server_handle,
         if ((mask & KADM5_PW_LOCKOUT_DURATION))
             p->pw_lockout_duration = entry->pw_lockout_duration;
     }
+    p->allowed_keysalts = NULL;
+    p->tl_data = NULL;
+    p->n_tl_data = 0;
     if (handle->api_version == KADM5_API_VERSION_4) {
         if ((mask & KADM5_POLICY_ATTRIBUTES))
             p->attributes = entry->attributes;
@@ -359,6 +371,17 @@ kadm5_modify_policy_internal(void *server_handle,
             goto cleanup;
         }
         if ((mask & KADM5_POLICY_TL_DATA)) {
+            krb5_tl_data *tl_data_tail;
+
+            for (tl_data_tail = entry->tl_data; tl_data_tail;
+                 tl_data_tail = tl_data_tail->tl_data_next) {
+                if ((ret = krb5_db_update_tl_data(handle->context,
+                                                  &p->n_tl_data,
+                                                  &p->tl_data,
+                                                  tl_data_tail)))
+                    goto cleanup;
+            }
+
             if ((ret = copy_tl_data(entry->n_tl_data, entry->tl_data,
                                     &p->tl_data)))
                 goto cleanup;
@@ -410,6 +433,9 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
         entry->pw_failcnt_interval = t->pw_failcnt_interval;
         entry->pw_lockout_duration = t->pw_lockout_duration;
     }
+    entry->allowed_keysalts = NULL;
+    entry->tl_data = NULL;
+    entry->n_tl_data = 0;
     if (handle->api_version == KADM5_API_VERSION_4) {
         entry->attributes = t->attributes;
         entry->max_life = t->max_life;

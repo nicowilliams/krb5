@@ -575,6 +575,12 @@ krb5_dbe_delete_tl_data( krb5_context    context,
                          krb5_int16      tl_data_type);
 
 krb5_error_code
+krb5_db_update_tl_data(krb5_context          context,
+                       krb5_int16          * n_tl_datap,
+                       krb5_tl_data        **tl_datap,
+                       krb5_tl_data        * new_tl_data);
+
+krb5_error_code
 krb5_dbe_update_tl_data( krb5_context          context,
                          krb5_db_entry       * entry,
                          krb5_tl_data        * new_tl_data);

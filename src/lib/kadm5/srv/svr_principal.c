@@ -173,7 +173,8 @@ static void cleanup_key_data(context, count, data)
     krb5_db_free(context, data);
 }
 
-static int
+/* Check whether a ks_tuple is present in an array of ks_tuples */
+static krb5_boolean
 ks_tuple_present(int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
                  krb5_key_salt_tuple *looking_for)
 {
@@ -182,9 +183,9 @@ ks_tuple_present(int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
     for (i = 0; i < n_ks_tuple; i++) {
         if (ks_tuple[i].ks_enctype == looking_for->ks_enctype &&
             ks_tuple[i].ks_salttype == looking_for->ks_salttype)
-            return 1;
+            return TRUE;
     }
-    return 0;
+    return FALSE;
 }
 
 /*
@@ -196,101 +197,94 @@ ks_tuple_present(int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
  */
 static kadm5_ret_t
 apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
-                     int n_ks_tuple, krb5_key_salt_tuple *ks_tuple, int
-                     *new_n_ks_tuple, krb5_key_salt_tuple **new_ks_tuple)
+                     int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
+                     int *new_n_ks_tuple, krb5_key_salt_tuple **new_ks_tuple)
 {
     kadm5_ret_t ret;
     kadm5_policy_ent_rec polent;
     int ak_n_ks_tuple = 0;
     krb5_key_salt_tuple *ak_ks_tuple = NULL;
-    int i;
-    int allowed = 0;
+    krb5_key_salt_tuple *subset;
+    int i, m;
 
     *new_n_ks_tuple = 0;
     *new_ks_tuple = NULL;
 
     memset(&polent, 0, sizeof(polent));
-    if (policy && (ret = kadm5_get_policy(handle->lhandle,
-                                (char *)policy, &polent)) != KADM5_OK) {
+    if (policy != NULL &&
+        (ret = kadm5_get_policy(handle->lhandle, (char *)policy,
+                                &polent)) != KADM5_OK) {
         if (ret == EINVAL)
             ret = KADM5_BAD_POLICY;
         if (ret)
             goto cleanup;
     }
 
-    if (polent.allowed_keysalts != NULL) {
-        ret = krb5_string_to_keysalts(polent.allowed_keysalts,
-                                      ", \t",/* Tuple separators */
-                                      ":.-", /* Key/salt separators */
-                                      0,     /* No duplicates */
-                                      &ak_ks_tuple,
-                                      &ak_n_ks_tuple);
-        /*
-         * Malformed policy?  Shouldn't happen, unless some enctype in
-         * it is now weak and disallowed, say.
-         */
-        if (ret)
-            goto cleanup;
-
-        /* Have policy but no ks_tuple input?  Output the policy. */
+    if (polent.allowed_keysalts == NULL) {
+        /* Requested keysalts allowed or default to supported_enctypes */
         if (n_ks_tuple == 0) {
-            *new_n_ks_tuple = ak_n_ks_tuple;
-            *new_ks_tuple = ak_ks_tuple;
+            /* Default to supported_enctypes */
+            n_ks_tuple = handle->params.num_keysalts;
+            ks_tuple = handle->params.keysalts;
+        }
+        /* Dup the requested or defaulted keysalt tuples */
+        *new_ks_tuple = malloc(n_ks_tuple * sizeof(**new_ks_tuple));
+        if (*new_ks_tuple == NULL) {
+            ret = ENOMEM;
+            goto cleanup;
+        }
+        memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof(**new_ks_tuple));
+        *new_n_ks_tuple = n_ks_tuple;
+        ret = 0;
+        goto cleanup;
+    }
+
+    ret = krb5_string_to_keysalts(polent.allowed_keysalts,
+                                  ", \t",/* Tuple separators */
+                                  ":.-", /* Key/salt separators */
+                                  0,     /* No duplicates */
+                                  &ak_ks_tuple,
+                                  &ak_n_ks_tuple);
+    /*
+     * Malformed policy?  Shouldn't happen, but it's remotely possible
+     * someday, so we don't assert, just bail.
+     */
+    if (ret)
+        goto cleanup;
+
+    /* Check that the requested ks_tuples are within policy, if we have one. */
+    for (i = 0; i < n_ks_tuple; i++) {
+        if (!ks_tuple_present(ak_n_ks_tuple, ak_ks_tuple, &ks_tuple[i])) {
+            ret = KADM5_BAD_KEYSALTS;
             goto cleanup;
         }
     }
 
-    /* Check that the requested ks_tuples are within policy, if we have one. */
-    for (i = 0; i < n_ks_tuple && ak_n_ks_tuple; i++, allowed = 0) {
-        if (!ks_tuple_present(ak_n_ks_tuple, ak_ks_tuple, &ks_tuple[i])) {
-            ret = KRB5_KDB_BAD_ENCTYPE; /* Get a better error code? */
-            goto cleanup;
-        }
+    /* Have policy but no ks_tuple input?  Output the policy. */
+    if (n_ks_tuple == 0) {
+        *new_n_ks_tuple = ak_n_ks_tuple;
+        *new_ks_tuple = ak_ks_tuple;
+        ak_ks_tuple = NULL;
+        goto cleanup;
     }
 
     /*
      * Now filter the policy ks tuples by the requested ones so as to
-     * preserve the relative ordering from the policy.
+     * preserve in the requested sub-set the relative ordering from the
+     * policy.  We could optimize this (if (n_ks_tuple == ak_n_ks_tuple)
+     * then skip this), but we don't bother.
      */
-    if (ak_n_ks_tuple) {
-        krb5_key_salt_tuple *ak_ks_tuple_subset;
-        int m;
-
-        ak_ks_tuple_subset = calloc(n_ks_tuple,
-                                     sizeof(*ak_ks_tuple_subset));
-        if (ak_ks_tuple_subset == NULL) {
-            ret = ENOMEM;
-            goto cleanup;
-        }
-        for (m = 0, i = 0; i < ak_n_ks_tuple && m < n_ks_tuple; i++) {
-            if (!ks_tuple_present(n_ks_tuple, ks_tuple, &ak_ks_tuple[i]))
-                ak_ks_tuple_subset[m++] = ak_ks_tuple[i];
-        }
-        free(ak_ks_tuple);
-        ak_ks_tuple = ak_ks_tuple_subset;
-        ak_n_ks_tuple = n_ks_tuple;
-    }
-
-    /*
-     * Output a copy of the input ks_tuple if we had any, else of
-     * supported_enctypes.  Has to be a copy so the caller can free it.
-     */
-    if (n_ks_tuple == 0) {
-        /* Default to supported_enctypes */
-        n_ks_tuple = handle->params.num_keysalts;
-        ks_tuple = handle->params.keysalts;
-    }
-
-    *new_ks_tuple = malloc(n_ks_tuple * sizeof(**new_ks_tuple));
-    if (*new_ks_tuple == NULL) {
+    subset = calloc(n_ks_tuple, sizeof(*subset));
+    if (subset == NULL) {
         ret = ENOMEM;
         goto cleanup;
     }
-    if (ak_n_ks_tuple)
-        memcpy(*new_ks_tuple, ak_ks_tuple, n_ks_tuple * sizeof(**new_ks_tuple));
-    else
-        memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof(**new_ks_tuple));
-    *new_n_ks_tuple = n_ks_tuple;
+    for (m = 0, i = 0; i < ak_n_ks_tuple && m < n_ks_tuple; i++) {
+        if (!ks_tuple_present(n_ks_tuple, ks_tuple, &ak_ks_tuple[i]))
+            subset[m++] = ak_ks_tuple[i];
+    }
+    *new_ks_tuple = subset;
+    *new_n_ks_tuple = m;
     ret = 0;
 
 cleanup:
@@ -306,7 +300,8 @@ cleanup:
  * was invalid UTF-8, which runs afoul of the arcfour string-to-key.
  */
 static void
-check_1_6_dummy(kadm5_principal_ent_t entry, long mask, char **passptr)
+check_1_6_dummy(kadm5_principal_ent_t entry, long mask,
+                int n_ks_tuple, krb5_key_salt_tuple *ks_tuple, char **passptr)
 {
     int i;
     char *password = *passptr;
@@ -357,7 +352,7 @@ kadm5_create_principal_3(void *server_handle,
 
     krb5_clear_error_message(handle->context);
 
-    check_1_6_dummy(entry, mask, &password);
+    check_1_6_dummy(entry, mask, n_ks_tuple, ks_tuple, &password);
 
     /*
      * Argument sanity checking, and opening up the DB
@@ -489,9 +484,8 @@ kadm5_create_principal_3(void *server_handle,
      * check enctype policy, which is why we check/initialize ks_tuple
      * this late.
      */
-    ret = apply_keysalt_policy(handle, entry->policy, n_ks_tuple,
-                               ks_tuple, &new_n_ks_tuple,
-                               &new_ks_tuple);
+    ret = apply_keysalt_policy(handle, entry->policy, n_ks_tuple, ks_tuple,
+                               &new_n_ks_tuple, &new_ks_tuple);
     if (ret)
         goto cleanup;
 
@@ -2020,6 +2014,7 @@ kadm5_setkey_principal_3(void *server_handle,
 
     ret = apply_keysalt_policy(handle, adb.policy, n_ks_tuple, ks_tuple,
                                &new_n_ks_tuple, &new_ks_tuple);
+    free(new_ks_tuple); /* We have no use for new_*ks_tuple here */
     if (ret)
         goto done;
 
@@ -2031,24 +2026,17 @@ kadm5_setkey_principal_3(void *server_handle,
                                               &similar)))
                 return(ret);
             if (similar) {
-                if (new_n_ks_tuple) {
-                    if (new_ks_tuple[i].ks_salttype == new_ks_tuple[j].ks_salttype) {
-                        ret = KADM5_SETKEY_DUP_ENCTYPES;
-                        goto done;
-                    }
-                } else {
-                    ret = KADM5_SETKEY_DUP_ENCTYPES;
-                    goto done;
-                }
+                if (n_ks_tuple) {
+                    if (ks_tuple[i].ks_salttype == ks_tuple[j].ks_salttype)
+                        return KADM5_SETKEY_DUP_ENCTYPES;
+                } else
+                    return KADM5_SETKEY_DUP_ENCTYPES;
             }
         }
     }
-    /* Note: we don't want to refer to new_*ks_tuple from here */
 
-    if (n_ks_tuple && n_ks_tuple != n_keys) {
-        ret = KADM5_SETKEY3_ETYPE_MISMATCH;
-        goto done;
-    }
+    if (n_ks_tuple && n_ks_tuple != n_keys)
+        return KADM5_SETKEY3_ETYPE_MISMATCH;
 
     for (kvno = 0, i=0; i<kdb->n_key_data; i++)
         if (kdb->key_data[i].key_data_kvno > kvno)
@@ -2186,7 +2174,6 @@ kadm5_setkey_principal_3(void *server_handle,
 
     ret = KADM5_OK;
 done:
-    free(new_ks_tuple);
     kdb_free_entry(handle, kdb, &adb);
     if (have_pol)
         kadm5_free_policy_ent(handle->lhandle, &pol);

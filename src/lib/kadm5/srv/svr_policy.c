@@ -52,6 +52,23 @@ kadm5_create_policy(void *server_handle,
         return kadm5_create_policy_internal(server_handle, entry, mask);
 }
 
+/* Validate allowed_keysalts */
+
+static kadm5_ret_t
+validate_allowed_keysalts(const char *allowed_keysalts)
+{
+    kadm5_ret_t ret;
+    krb5_key_salt_tuple *ks_tuple = NULL;
+    krb5_int32 n_ks_tuple = 0;
+
+    ret = krb5_string_to_keysalts(allowed_keysalts, ", \t", ":.-", 0,
+                                  &ks_tuple, &n_ks_tuple);
+    free(ks_tuple);
+    if (ret == EINVAL)
+        return KADM5_BAD_KEYSALTS;
+    return ret;
+}
+
 /*
  * Function: kadm5_create_policy_internal
  *
@@ -90,14 +107,8 @@ kadm5_create_policy_internal(void *server_handle,
     if (!(mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
     if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
-        krb5_key_salt_tuple *ks_tuple = NULL;
-        krb5_int32 n_ks_tuple = 0;
-        ret = krb5_string_to_keysalts(entry->allowed_keysalts, ", \t", ":.-",
-                                      0, &ks_tuple, &n_ks_tuple);
-        free(ks_tuple);
-        if (ret == EINVAL)
-            return KADM5_BAD_KEYSALTS;
-        else if (ret)
+        ret = validate_allowed_keysalts(entry->allowed_keysalts);
+        if (ret)
             return ret;
     }
 
@@ -286,9 +297,10 @@ kadm5_ret_t
 kadm5_modify_policy_internal(void *server_handle,
                              kadm5_policy_ent_t entry, long mask)
 {
-    kadm5_server_handle_t handle = server_handle;
-    osa_policy_ent_t    p;
-    int                 ret;
+    kadm5_server_handle_t    handle = server_handle;
+    krb5_tl_data            *tl;
+    osa_policy_ent_t         p;
+    int                      ret;
 
     CHECK_HANDLE(server_handle);
 
@@ -299,23 +311,16 @@ kadm5_modify_policy_internal(void *server_handle,
     if((mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
     if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
-        krb5_key_salt_tuple *ks_tuple = NULL;
-        krb5_int32 n_ks_tuple;
-        ret = krb5_string_to_keysalts(entry->allowed_keysalts, ", \t", ":.-",
-                                      0, &ks_tuple, &n_ks_tuple);
-        free(ks_tuple);
-        if (ret == EINVAL)
-            return KADM5_BAD_KEYSALTS;
-        else if (ret)
+        ret = validate_allowed_keysalts(entry->allowed_keysalts);
+        if (ret)
             return ret;
     }
     if ((mask & KADM5_POLICY_TL_DATA)) {
-        krb5_tl_data *tl_data_orig = entry->tl_data;
-
-        while (tl_data_orig) {
-            if (tl_data_orig->tl_data_type < 256)
+        tl = entry->tl_data;
+        while (tl != NULL) {
+            if (tl->tl_data_type < 256)
                 return KADM5_BAD_TL_TYPE;
-            tl_data_orig = tl_data_orig->tl_data_next;
+            tl = tl->tl_data_next;
         }
     }
 
@@ -387,12 +392,10 @@ kadm5_modify_policy_internal(void *server_handle,
             }
         }
         if ((mask & KADM5_POLICY_TL_DATA)) {
-            krb5_tl_data *tl;
-
-            for (tl = entry->tl_data; tl; tl = tl->tl_data_next) {
-                if ((ret = krb5_db_update_tl_data(handle->context,
-                                             &p->n_tl_data, &p->tl_data,
-                                             tl)))
+            for (tl = entry->tl_data; tl != NULL; tl = tl->tl_data_next) {
+                ret = krb5_db_update_tl_data(handle->context, &p->n_tl_data,
+                                             &p->tl_data, tl);
+                if (ret)
                     goto cleanup;
             }
         }
@@ -420,7 +423,7 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
 
     if (name == (kadm5_policy_t) NULL)
         return EINVAL;
-    if (strlen(name) == 0)
+    if(strlen(name) == 0)
         return KADM5_BAD_POLICY;
     ret = krb5_db_get_policy(handle->context, name, &t);
     if (ret == KRB5_KDB_NOENTRY)
@@ -454,7 +457,8 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
                 goto cleanup;
             }
         }
-        if ((ret = copy_tl_data(t->n_tl_data, t->tl_data, &entry->tl_data)))
+        ret = copy_tl_data(t->n_tl_data, t->tl_data, &entry->tl_data);
+        if (ret)
             goto cleanup;
         entry->n_tl_data = t->n_tl_data;
     }

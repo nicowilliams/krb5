@@ -718,6 +718,7 @@ dump_k5beta6_iterator(ptr, entry)
     return dump_k5beta6_iterator_ext(ptr, entry, 0);
 }
 
+/* Dumps TL data; common to principals and policies */
 static void
 dump_tl_data(FILE *ofile, krb5_tl_data *tlp, int is_princ, int kadm)
 {
@@ -1841,6 +1842,10 @@ process_k5beta_record(fname, kcontext, filep, flags, linenop)
     return(retval);
 }
 
+/*
+ * Allocates and forms a TL data list that will be used to read TL data
+ * into
+ */
 static int
 alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
 {
@@ -1848,7 +1853,8 @@ alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
     int i;
 
     for (i = 0; i < n_tl_data; i++) {
-        if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL)
+        *tlp = calloc(1, sizeof(krb5_tl_data));
+        if (*tlp == NULL)
             return ENOMEM; /* caller cleans up */
         tlp = &((*tlp)->tl_data_next);
     }
@@ -1856,6 +1862,7 @@ alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
     return 0;
 }
 
+/* Read TL data; common to principals and policies */
 static int
 process_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data,
                 const char **errstr)
@@ -1877,7 +1884,8 @@ process_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data,
         tl->tl_data_type = (krb5_int16) t1;
         tl->tl_data_length = (krb5_int16) t2;
         if (tl->tl_data_length) {
-            if ((tl->tl_data_contents = malloc(t2 + 1)) == NULL)
+            tl->tl_data_contents = malloc(t2 + 1);
+            if (tl->tl_data_contents == NULL)
                 return ENOMEM;
             if (read_octet_string(filep, tl->tl_data_contents,
                                   tl->tl_data_length)) {
@@ -1886,7 +1894,7 @@ process_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data,
             }
         } else {
             nread = fscanf(filep, "%d", &t1);
-            if ((nread != 1) || (t1 != -1)) {
+            if (nread != 1 || t1 != -1) {
                 *errstr = read_tcontents;
                 return EINVAL;
             }
@@ -2420,12 +2428,8 @@ process_r1_8_record(fname, kcontext, filep, flags, linenop)
  * Returns -1 for end of file, 0 for success and 1 for failure.
  */
 static int
-process_r1_11_record(fname, kcontext, filep, flags, linenop)
-    char                *fname;
-    krb5_context        kcontext;
-    FILE                *filep;
-    int                 flags;
-    int                 *linenop;
+process_r1_11_record(char *fname, krb5_context kcontext, FILE *filep,
+                     int flags, int *linenop)
 {
     int nread;
     char rectype[100];
@@ -2436,11 +2440,9 @@ process_r1_11_record(fname, kcontext, filep, flags, linenop)
     else if (nread != 1)
         return 1;
     if (!strcmp(rectype, "princ"))
-        process_k5beta6_record(fname, kcontext, filep, flags,
-                               linenop);
+        process_k5beta6_record(fname, kcontext, filep, flags, linenop);
     else if (!strcmp(rectype, "policy"))
-        process_r1_11_policy(fname, kcontext, filep, flags,
-                            linenop);
+        process_r1_11_policy(fname, kcontext, filep, flags, linenop);
     else {
         fprintf(stderr, _("unknown record type \"%s\" on line %d\n"),
                 rectype, *linenop);

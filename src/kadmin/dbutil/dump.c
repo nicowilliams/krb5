@@ -1857,7 +1857,8 @@ alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
 }
 
 static int
-proces_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data, const char **errstr)
+process_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data,
+                const char **errstr)
 {
     krb5_tl_data         *tl;
     int                   nread;
@@ -2018,7 +2019,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
      * that's what I did.  [krb5-admin/89]
      */
     if (dbentry->n_tl_data != NULL) {
-        if (proces_tl_data(fname, filep, dbentry->tl_data, &try2read))
+        if (process_tl_data(fname, filep, dbentry->tl_data, &try2read))
             goto cleanup;
         for (tl = dbentry->tl_data; tl; tl = tl->tl_data_next) {
             /* test to set mask fields */
@@ -2280,7 +2281,7 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     if ((ret = alloc_tl_data(rec.n_tl_data, &rec.tl_data)))
         goto cleanup;
 
-    if ((ret = proces_tl_data(fname, filep, rec.tl_data, &try2read)))
+    if ((ret = process_tl_data(fname, filep, rec.tl_data, &try2read)))
         goto cleanup;
 
     if ((ret = krb5_db_create_policy(kcontext, &rec)) &&

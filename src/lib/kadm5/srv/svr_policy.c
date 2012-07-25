@@ -412,6 +412,8 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
     kadm5_ret_t                 ret;
     kadm5_server_handle_t handle = server_handle;
 
+    memset(entry, 0, sizeof(*entry));
+
     CHECK_HANDLE(server_handle);
 
     krb5_clear_error_message(handle->context);
@@ -426,7 +428,6 @@ kadm5_get_policy(void *server_handle, kadm5_policy_t name,
     else if (ret)
         return ret;
 
-    memset(entry, 0, sizeof(*entry));
     if ((entry->policy = strdup(t->name)) == NULL) {
         ret = ENOMEM;
         goto cleanup;

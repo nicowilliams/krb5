@@ -1942,7 +1942,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
 
     /* Get memory for flattened principal name */
     CHECK_POSITIVE_SIZE(t2);
-    if (!(name = malloc(t2 + 1)))
+    if ((name = malloc(t2 + 1)) == NULL)
         goto cleanup;
 
     /* Get memory for and form tagged data linked list */
@@ -1952,7 +1952,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
 
     /* Get memory for key list */
     CHECK_POSITIVE_SIZE(t4);
-    if (t4 && !(kp = malloc(t4*sizeof(krb5_key_data))))
+    if (t4 && (kp = malloc(t4*sizeof(krb5_key_data))) == NULL)
         goto cleanup;
 
     /* Get memory for extra data */
@@ -1964,12 +1964,12 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     dbentry->n_key_data = t4;
     dbentry->e_length = t5;
 
-    if (kp) {
+    if (kp != NULL) {
         memset(kp, 0, t4*sizeof(krb5_key_data));
         dbentry->key_data = kp;
         kp = NULL;
     }
-    if (op) {
+    if (op != NULL) {
         memset(op, 0, t5);
         dbentry->e_data = op;
         op = NULL;
@@ -2017,7 +2017,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
      * it at dump time has almost as good an effect, so
      * that's what I did.  [krb5-admin/89]
      */
-    if (dbentry->n_tl_data) {
+    if (dbentry->n_tl_data != NULL) {
         if (proces_tl_data(fname, filep, dbentry->tl_data, &try2read))
             goto cleanup;
         for (tl = dbentry->tl_data; tl; tl = tl->tl_data_next) {
@@ -2061,7 +2061,7 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
             kdatap->key_data_ver = (krb5_int16) t1;
             kdatap->key_data_kvno = (krb5_int16) t2;
 
-            for (j=0; j<t1; j++) {
+            for (j = 0; j < t1; j++) {
                 nread = fscanf(filep, "%d\t%d\t", &t3, &t4);
                 if (nread != 2) {
                     try2read = read_ktypelen;
@@ -2079,9 +2079,9 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
                     continue;
                 }
                 CHECK_POSITIVE_SIZE(t4);
-                if (!(kdatap->key_data_contents[j] = malloc(t4 + 1)) ||
-                    read_octet_string(filep,
-                                      kdatap->key_data_contents[j], t4)) {
+                if ((kdatap->key_data_contents[j] = malloc(t4 + 1)) == NULL ||
+                    read_octet_string(filep, kdatap->key_data_contents[j],
+                                      t4)) {
                     try2read = read_kcontents;
                     goto cleanup;
                 }
@@ -2131,12 +2131,9 @@ cleanup:
         (void) fscanf(filep, "%*[^\n]");
     }
 
-    if (op)
-        free(op);
-    if (kp)
-        free(kp);
-    if (name)
-        free(name);
+    free(op);
+    free(kp);
+    free(name);
     krb5_db_free_principal(kcontext, dbentry);
 
     return retval;

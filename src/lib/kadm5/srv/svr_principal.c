@@ -203,7 +203,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
     kadm5_policy_ent_rec polent;
     int ak_n_ks_tuple = 0;
     krb5_key_salt_tuple *ak_ks_tuple = NULL;
-    int i, k;
+    int i;
     int allowed = 0;
 
     *new_n_ks_tuple = 0;
@@ -230,13 +230,13 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
          * it is now weak and disallowed, say.
          */
         if (ret)
-            return ret;
+            goto cleanup;
 
         /* Have policy but no ks_tuple input?  Output the policy. */
         if (n_ks_tuple == 0) {
             *new_n_ks_tuple = ak_n_ks_tuple;
             *new_ks_tuple = ak_ks_tuple;
-            return 0;
+            goto cleanup;
         }
     }
 
@@ -263,7 +263,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
             goto cleanup;
         }
         for (m = 0, i = 0; i < ak_n_ks_tuple && m < n_ks_tuple; i++) {
-            if (!ks_tuple_present(ak_n_ks_tuple, ak_ks_tuple, &ks_tuple[i]))
+            if (!ks_tuple_present(n_ks_tuple, ks_tuple, &ak_ks_tuple[i]))
                 ak_ks_tuple_subset[m++] = ak_ks_tuple[i];
         }
         free(ak_ks_tuple);
@@ -294,6 +294,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
     ret = 0;
 
 cleanup:
+    kadm5_free_policy_ent(handle->lhandle, &polent);
     free(ak_ks_tuple);
     return ret;
 }

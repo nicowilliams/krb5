@@ -1850,7 +1850,6 @@ alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
     for (i = 0; i < n_tl_data; i++) {
         if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL)
             return ENOMEM; /* caller cleans up */
-        memset(*tlp, 0, sizeof(krb5_tl_data));
         tlp = &((*tlp)->tl_data_next);
     }
 
@@ -2256,15 +2255,11 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
     rec.name = namebuf;
     rec.allowed_keysalts = keysaltbuf;
 
-    /*
-     * To make this compatible with future policy extensions, we
-     * ignore any additional values.
-     */
     nread = fscanf(filep,
                    "%1023s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t"
                    "%d\t%d\t%d\t"
                    K5CONST_WIDTH_SCANF_STR(KRB5_KDB_MAX_ALLOWED_KS_LEN)
-                   "\n%hd",
+                   "\t%hd",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,
@@ -2290,16 +2285,13 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
 
     if ((ret = proces_tl_data(fname, filep, rec.tl_data, &try2read)))
         goto cleanup;
-    (void) fscanf(filep, "%*[^\n]"); /* Just in case! */
 
-    if ((ret = krb5_db_create_policy(kcontext, &rec))) {
-        if (ret &&
-            ((ret = krb5_db_put_policy(kcontext, &rec)))) {
-            fprintf(stderr, "cannot create policy on line %d: %s\n",
-                    *linenop, error_message(ret));
-            try2read = NULL;
-            goto cleanup;
-        }
+    if ((ret = krb5_db_create_policy(kcontext, &rec)) &&
+        (ret = krb5_db_put_policy(kcontext, &rec))) {
+        fprintf(stderr, "cannot create policy on line %d: %s\n",
+                *linenop, error_message(ret));
+        try2read = NULL;
+        goto cleanup;
     }
     if (flags & FLAG_VERBOSE)
         fprintf(stderr, "created policy %s\n", rec.name);

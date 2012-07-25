@@ -211,7 +211,10 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
                                       0,     /* No duplicates */
                                       &ak_ks_tuple,
                                       &ak_n_ks_tuple);
-        /* Malformed policy?  Let the admin know so they can fix it. */
+        /*
+         * Malformed policy?  Shouldn't happen, unless some enctype in
+         * it is now weak and disallowed, say.
+         */
         if (ret)
             return ret;
 
@@ -223,9 +226,9 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
         }
     }
 
-    /* Check that the requested ks_tuple is within policy, if we have one. */
-    for (i = 0; i >= 0 && i < n_ks_tuple && ak_n_ks_tuple; i++, allowed = 0) {
-        for (k = 0; k >= 0 && k < ak_n_ks_tuple && !allowed; k++) {
+    /* Check that the requested ks_tuples are within policy, if we have one. */
+    for (i = 0; i < n_ks_tuple && ak_n_ks_tuple; i++, allowed = 0) {
+        for (k = 0; k < ak_n_ks_tuple && !allowed; k++) {
             if (ks_tuple[i].ks_enctype == ak_ks_tuple[k].ks_enctype &&
                 ks_tuple[i].ks_salttype == ak_ks_tuple[k].ks_salttype)
                 allowed = 1;
@@ -237,11 +240,10 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
     }
 
     /*
-     * Now filter new_ks_tuple by ks_tuple so as to preserve the
-     * allowed_keysalts relative ordering, though we ignore the salt
-     * type in this filtering.
+     * Now filter the policy ks tuples by the requested ones so as to
+     * preserve the relative ordering from the policy.
      */
-    if (ak_n_ks_tuple != NULL) {
+    if (ak_n_ks_tuple) {
         krb5_key_salt_tuple *ak_ks_tuple_subset;
         int m;
 
@@ -251,9 +253,8 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
             ret = ENOMEM;
             goto cleanup;
         }
-        for (m = 0, i = 0;
-             i >= 0 && i < ak_n_ks_tuple && m < n_ks_tuple;
-             i++) {
+        /* First reorder by enctype and salttype */
+        for (m = 0, i = 0; i < ak_n_ks_tuple && m < n_ks_tuple; i++) {
             for (k = 0; k < n_ks_tuple; k++) {
                 if (ak_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype &&
                     ak_ks_tuple[i].ks_salttype == ks_tuple[k].ks_salttype)
@@ -262,9 +263,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
         }
         if (m < n_ks_tuple) {
             /* Do it again, but this time ignore salttypes */
-            for (m = 0, i = 0;
-                 i >= 0 && i < ak_n_ks_tuple && m < n_ks_tuple;
-                 i++) {
+            for (m = 0, i = 0; i < ak_n_ks_tuple && m < n_ks_tuple; i++) {
                 for (k = 0; k < n_ks_tuple; k++) {
                     if (ak_ks_tuple[i].ks_enctype == ks_tuple[k].ks_enctype)
                         ak_ks_tuple_subset[m++] = ak_ks_tuple[i];

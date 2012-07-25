@@ -271,7 +271,7 @@ copy_tl_data(krb5_int16 n_tl_data, krb5_tl_data *tl_data,
     tl = tl_data;
     tl_new = *out;
     for (; tl; tl = tl->tl_data_next, tl_new = tl_new->tl_data_next) {
-        if (!(tl_new->tl_data_contents = malloc(tl->tl_data_length)))
+        if ((tl_new->tl_data_contents = malloc(tl->tl_data_length)) == NULL)
             return ENOMEM;
         memcpy(tl_new->tl_data_contents, tl->tl_data_contents,
                tl->tl_data_length);
@@ -375,12 +375,12 @@ kadm5_modify_policy_internal(void *server_handle,
             p->max_renewable_life = entry->max_renewable_life;
         if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS)) {
             krb5_db_free(handle->context, p->allowed_keysalts);
-            if (entry->allowed_keysalts) {
+            if (entry->allowed_keysalts != NULL) {
                 size_t len = strlen(entry->allowed_keysalts) + 1;
 
                 p->allowed_keysalts = krb5_db_alloc(handle->context, NULL,
                                                     len);
-                if (!p->allowed_keysalts) {
+                if (p->allowed_keysalts == NULL) {
                     ret = ENOMEM;
                     goto cleanup;
                 }

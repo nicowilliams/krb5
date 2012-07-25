@@ -204,7 +204,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
             goto cleanup;
     }
 
-    if (polent.allowed_keysalts) {
+    if (polent.allowed_keysalts != NULL) {
         ret = krb5_string_to_keysalts(polent.allowed_keysalts,
                                       ", \t",/* Tuple separators */
                                       ":.-", /* Key/salt separators */
@@ -241,13 +241,13 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
      * allowed_keysalts relative ordering, though we ignore the salt
      * type in this filtering.
      */
-    if (ak_n_ks_tuple) {
+    if (ak_n_ks_tuple != NULL) {
         krb5_key_salt_tuple *ak_ks_tuple_subset;
         int m;
 
         ak_ks_tuple_subset = calloc(n_ks_tuple,
                                      sizeof(*ak_ks_tuple_subset));
-        if (!ak_ks_tuple_subset) {
+        if (ak_ks_tuple_subset == NULL) {
             ret = ENOMEM;
             goto cleanup;
         }

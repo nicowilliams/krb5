@@ -2440,10 +2440,10 @@ process_r1_11_record(fname, kcontext, filep, flags, linenop)
         return -1;
     else if (nread != 1)
         return 1;
-    if (strcmp(rectype, "princ") == 0)
+    if (!strcmp(rectype, "princ"))
         process_k5beta6_record(fname, kcontext, filep, flags,
                                linenop);
-    else if (strcmp(rectype, "policy") == 0)
+    else if (!strcmp(rectype, "policy"))
         process_r1_11_policy(fname, kcontext, filep, flags,
                             linenop);
     else {

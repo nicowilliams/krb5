@@ -1909,14 +1909,6 @@ process_tl_data(const char *fname, FILE *filep, krb5_tl_data *tl_data,
     return 0;
 }
 
-#define CHECK_POSITIVE_SIZE(x)          \
-        do {                            \
-            if ((x) < 0) {              \
-                try2read = read_negint; \
-                goto cleanup;           \
-            }                           \
-        } while (0)
-
 /*
  * process_k5beta6_record()     - Handle a dump record in krb5b6 format.
  *
@@ -1955,7 +1947,6 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
         goto cleanup;
 
     /* Get memory for flattened principal name */
-    CHECK_POSITIVE_SIZE(t2);
     if ((name = malloc(t2 + 1)) == NULL)
         goto cleanup;
 
@@ -1965,12 +1956,10 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
     dbentry->n_tl_data = t3;
 
     /* Get memory for key list */
-    CHECK_POSITIVE_SIZE(t4);
     if (t4 && (kp = malloc(t4*sizeof(krb5_key_data))) == NULL)
         goto cleanup;
 
     /* Get memory for extra data */
-    CHECK_POSITIVE_SIZE(t5);
     if (t5 && !(op = malloc(t5)))
         goto cleanup;
 
@@ -2093,7 +2082,6 @@ process_k5beta6_record(char *fname, krb5_context kcontext, FILE *filep,
                     }
                     continue;
                 }
-                CHECK_POSITIVE_SIZE(t4);
                 if ((kdatap->key_data_contents[j] = malloc(t4 + 1)) == NULL ||
                     read_octet_string(filep, kdatap->key_data_contents[j],
                                       t4)) {
@@ -2147,8 +2135,6 @@ cleanup:
     return retval;
 }
 
-#undef CHECK_POSITIVE_SIZE
-
 static int
 process_k5beta7_policy(fname, kcontext, filep, flags, linenop)
     char                *fname;
@@ -2166,7 +2152,7 @@ process_k5beta7_policy(fname, kcontext, filep, flags, linenop)
     (*linenop)++;
     rec.name = namebuf;
 
-    nread = fscanf(filep, "%1023s\t%d\t%d\t%d\t%d\t%d\t%d", rec.name,
+    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d", rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,
                    &rec.pw_history_num, &rec.policy_refcnt);
@@ -2213,7 +2199,7 @@ process_r1_8_policy(fname, kcontext, filep, flags, linenop)
      * To make this compatible with future policy extensions, we
      * ignore any additional values.
      */
-    nread = fscanf(filep, "%1023s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d%*[^\n]",
+    nread = fscanf(filep, "%1024s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d%*[^\n]",
                    rec.name,
                    &rec.pw_min_life, &rec.pw_max_life,
                    &rec.pw_min_length, &rec.pw_min_classes,

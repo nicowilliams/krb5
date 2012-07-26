@@ -1565,30 +1565,6 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
             }
             *mask |= KADM5_PW_LOCKOUT_DURATION;
             continue;
-        } else if (!strcmp(argv[i], "-maxticketlife")) {
-            if (++i > argc - 2)
-                return -1;
-            date = get_date(argv[i]);
-            if (date == (time_t)-1) {
-                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                        argv[i]);
-                return -1;
-            }
-            policy->max_life = date - now;
-            *mask |= KADM5_POLICY_MAX_LIFE;
-            continue;
-        } else if (!strcmp(argv[i], "-maxrenewlife")) {
-            if (++i > argc - 2)
-                return -1;
-            date = get_date(argv[i]);
-            if (date == (time_t)-1) {
-                fprintf(stderr, _("Invalid date specification \"%s\".\n"),
-                        argv[i]);
-                return -1;
-            }
-            policy->max_renewable_life = date - now;
-            *mask |= KADM5_POLICY_MAX_RLIFE;
-            continue;
         } else if (!strcmp(argv[i], "-allowedkeysalts")) {
             krb5_key_salt_tuple *ks_tuple = NULL;
             int n_ks_tuple = 0;
@@ -1625,9 +1601,6 @@ kadmin_addmodpol_usage(char *func)
             _("\t\t[-maxlife time] [-minlife time] [-minlength length]\n"
               "\t\t[-minclasses number] [-history number]\n"
               "\t\t[-maxfailure number] [-failurecountinterval time]\n"
-#ifdef NOTYET
-              "\t\t[-maxticketlife time] [-maxrenewlife time]\n"
-#endif
               "\t\t[-allowedkeysalts keysalts]\n"));
     fprintf(stderr, _("\t\t[-lockoutduration time]\n"));
 }

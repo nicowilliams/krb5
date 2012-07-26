@@ -52,8 +52,7 @@ kadm5_create_policy(void *server_handle,
         return kadm5_create_policy_internal(server_handle, entry, mask);
 }
 
-/* Validate allowed_keysalts */
-
+/* Validate allowed_keysalts. */
 static kadm5_ret_t
 validate_allowed_keysalts(const char *allowed_keysalts)
 {
@@ -106,7 +105,8 @@ kadm5_create_policy_internal(void *server_handle,
         return KADM5_BAD_POLICY;
     if (!(mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
-    if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
+    if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) &&
+        entry->allowed_keysalts != NULL) {
         ret = validate_allowed_keysalts(entry->allowed_keysalts);
         if (ret)
             return ret;
@@ -253,6 +253,7 @@ kadm5_modify_policy(void *server_handle,
         return kadm5_modify_policy_internal(server_handle, entry, mask);
 }
 
+/* Allocate and form a TL data list of a desired size. */
 static int
 alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
 {
@@ -260,7 +261,8 @@ alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
     int i;
 
     for (i = 0; i < n_tl_data; i++) {
-        if ((*tlp = calloc(1, sizeof(krb5_tl_data))) == NULL)
+        *tlp = calloc(1, sizeof(krb5_tl_data));
+        if (*tlp == NULL)
             return ENOMEM; /* caller cleans up */
         memset(*tlp, 0, sizeof(krb5_tl_data));
         tlp = &((*tlp)->tl_data_next);
@@ -282,7 +284,8 @@ copy_tl_data(krb5_int16 n_tl_data, krb5_tl_data *tl_data,
     tl = tl_data;
     tl_new = *out;
     for (; tl; tl = tl->tl_data_next, tl_new = tl_new->tl_data_next) {
-        if ((tl_new->tl_data_contents = malloc(tl->tl_data_length)) == NULL)
+        tl_new->tl_data_contents = malloc(tl->tl_data_length);
+        if (tl_new->tl_data_contents == NULL)
             return ENOMEM;
         memcpy(tl_new->tl_data_contents, tl->tl_data_contents,
                tl->tl_data_length);
@@ -301,6 +304,7 @@ kadm5_modify_policy_internal(void *server_handle,
     krb5_tl_data            *tl;
     osa_policy_ent_t         p;
     int                      ret;
+    size_t                   len;
 
     CHECK_HANDLE(server_handle);
 
@@ -310,7 +314,8 @@ kadm5_modify_policy_internal(void *server_handle,
         return KADM5_BAD_POLICY;
     if((mask & KADM5_POLICY))
         return KADM5_BAD_MASK;
-    if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) && entry->allowed_keysalts) {
+    if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS) &&
+        entry->allowed_keysalts != NULL) {
         ret = validate_allowed_keysalts(entry->allowed_keysalts);
         if (ret)
             return ret;
@@ -381,8 +386,7 @@ kadm5_modify_policy_internal(void *server_handle,
         if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS)) {
             krb5_db_free(handle->context, p->allowed_keysalts);
             if (entry->allowed_keysalts != NULL) {
-                size_t len = strlen(entry->allowed_keysalts) + 1;
-
+                len = strlen(entry->allowed_keysalts) + 1;
                 p->allowed_keysalts = krb5_db_alloc(handle->context, NULL,
                                                     len);
                 if (p->allowed_keysalts == NULL) {

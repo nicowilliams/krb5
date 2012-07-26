@@ -173,7 +173,7 @@ static void cleanup_key_data(context, count, data)
     krb5_db_free(context, data);
 }
 
-/* Check whether a ks_tuple is present in an array of ks_tuples */
+/* Check whether a ks_tuple is present in an array of ks_tuples. */
 static krb5_boolean
 ks_tuple_present(int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
                  krb5_key_salt_tuple *looking_for)
@@ -221,13 +221,13 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
     }
 
     if (polent.allowed_keysalts == NULL) {
-        /* Requested keysalts allowed or default to supported_enctypes */
+        /* Requested keysalts allowed or default to supported_enctypes. */
         if (n_ks_tuple == 0) {
-            /* Default to supported_enctypes */
+            /* Default to supported_enctypes. */
             n_ks_tuple = handle->params.num_keysalts;
             ks_tuple = handle->params.keysalts;
         }
-        /* Dup the requested or defaulted keysalt tuples */
+        /* Dup the requested or defaulted keysalt tuples. */
         *new_ks_tuple = malloc(n_ks_tuple * sizeof(**new_ks_tuple));
         if (*new_ks_tuple == NULL) {
             ret = ENOMEM;
@@ -2014,7 +2014,7 @@ kadm5_setkey_principal_3(void *server_handle,
 
     ret = apply_keysalt_policy(handle, adb.policy, n_ks_tuple, ks_tuple,
                                &new_n_ks_tuple, &new_ks_tuple);
-    free(new_ks_tuple); /* We have no use for new_*ks_tuple here */
+    free(new_ks_tuple);         /* We have no use for new_*ks_tuple here. */
     if (ret)
         goto done;
 

@@ -25,6 +25,7 @@ kadm5_free_policy_ent(void *server_handle, kadm5_policy_ent_t val)
         free(val->tl_data->tl_data_contents);
         free(val->tl_data);
     }
+    memset(val, 0, sizeof(*val));
     return KADM5_OK;
 }
 

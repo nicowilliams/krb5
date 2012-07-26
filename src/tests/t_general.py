@@ -29,7 +29,10 @@ realm.run_kadminl('addpol fred')
 dumpfile = os.path.join(realm.testdir, 'dump')
 realm.run_as_master([kdb5_util, 'dump', dumpfile])
 f = open('testdir/dump', 'a')
-f.write('policy	barney	0	0	1	1	1	0	0	0	0	0	0	0	-	1	2	28	fd100f5064625f6372656174696f6e404b5242544553542e434f4d00')
+f.write('policy	barney	0	0	1	1	1	0	'
+        '0	0	0	0	0	0	-	1	'
+        '2	28	'
+        'fd100f5064625f6372656174696f6e404b5242544553542e434f4d00')
 f.close()
 realm.run_as_master([kdb5_util, 'load', dumpfile])
 output = realm.run_kadminl('getpols')

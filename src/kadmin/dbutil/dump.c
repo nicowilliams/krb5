@@ -718,23 +718,30 @@ dump_k5beta6_iterator(ptr, entry)
     return dump_k5beta6_iterator_ext(ptr, entry, 0);
 }
 
-/* Dumps TL data; common to principals and policies */
+/*
+ * Dumps TL data; common to principals and policies.
+ *
+ * If filter_kadm then the KRB5_TL_KADM_DATA (where a principal's policy
+ * name is stored) is filtered out.  This is for dump formats that don't
+ * support policies.
+ */
 static void
-dump_tl_data(FILE *ofile, krb5_tl_data *tlp, int is_princ, int kadm)
+dump_tl_data(FILE *ofile, krb5_tl_data *tlp, krb5_boolean filter_kadm)
 {
     int i;
 
     for (; tlp; tlp = tlp->tl_data_next) {
-        if (is_princ && tlp->tl_data_type == KRB5_TL_KADM_DATA && !kadm)
+        if (tlp->tl_data_type == KRB5_TL_KADM_DATA && filter_kadm)
             continue;
         fprintf(ofile, "\t%d\t%d\t",
                 (int) tlp->tl_data_type,
                 (int) tlp->tl_data_length);
-        if (tlp->tl_data_length)
+        if (tlp->tl_data_length) {
             for (i = 0; i < tlp->tl_data_length; i++)
                 fprintf(ofile, "%02x", tlp->tl_data_contents[i]);
-        else
+        } else {
             fprintf(ofile, "%d", -1);
+        }
     }
 }
 
@@ -844,7 +851,7 @@ dump_k5beta6_iterator_ext(ptr, entry, kadm)
                     (arg->flags & FLAG_OMIT_NRA) ? 0 : entry->fail_auth_count);
 
             /* Pound out tagged data. */
-            dump_tl_data(arg->ofile, entry->tl_data, 1, kadm);
+            dump_tl_data(arg->ofile, entry->tl_data, !kadm);
             fprintf(arg->ofile, "\t");
 
             /* Pound out key data */
@@ -977,7 +984,8 @@ void dump_r1_8_policy(void *data, osa_policy_ent_t entry)
             entry->pw_failcnt_interval, entry->pw_lockout_duration);
 }
 
-void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
+void
+dump_r1_11_policy(void *data, osa_policy_ent_t entry)
 {
     struct dump_args *arg;
 
@@ -994,7 +1002,7 @@ void dump_r1_11_policy(void *data, osa_policy_ent_t entry)
             entry->allowed_keysalts ? entry->allowed_keysalts : "-",
             entry->n_tl_data);
 
-    dump_tl_data(arg->ofile, entry->tl_data, 0, 0);
+    dump_tl_data(arg->ofile, entry->tl_data, FALSE);
     fprintf(arg->ofile, "\n");
 }
 
@@ -1842,10 +1850,7 @@ process_k5beta_record(fname, kcontext, filep, flags, linenop)
     return(retval);
 }
 
-/*
- * Allocates and forms a TL data list that will be used to read TL data
- * into
- */
+/* Allocate and form a TL data list of a desired size. */
 static int
 alloc_tl_data(krb5_int16 n_tl_data, krb5_tl_data **tldp)
 {
@@ -2280,10 +2285,12 @@ process_r1_11_policy(char *fname, krb5_context kcontext, FILE *filep,
         rec.allowed_keysalts = NULL;
 
     /* Get TL data */
-    if ((ret = alloc_tl_data(rec.n_tl_data, &rec.tl_data)))
+    ret = alloc_tl_data(rec.n_tl_data, &rec.tl_data);
+    if (ret)
         goto cleanup;
 
-    if ((ret = process_tl_data(fname, filep, rec.tl_data, &try2read)))
+    ret = process_tl_data(fname, filep, rec.tl_data, &try2read);
+    if (ret)
         goto cleanup;
 
     if ((ret = krb5_db_create_policy(kcontext, &rec)) &&

@@ -7,14 +7,14 @@ krb5_conf1 = {'all': {'libdefaults': {
 
 realm = K5Realm(krb5_conf=krb5_conf1, create_host=False, get_creds=False)
 
-# Add policies
+# Add policies.
 realm.run_kadminl('addpol -allowedkeysalts aes256-cts:normal ak1')
 realm.run_kadminl('addpol -allowedkeysalts '
                   'aes256-cts:normal,rc4-hmac:normal ak2')
 
 realm.run_kadminl('addprinc -randkey -e aes256-cts:normal server')
 
-# Test with one-enctype allowed_keysalts
+# Test with one-enctype allowed_keysalts.
 realm.run_kadminl('modprinc -policy ak1 server')
 realm.run_kadminl('getprinc server')
 output = realm.run_kadminl('cpw -randkey -e aes128-cts:normal server')

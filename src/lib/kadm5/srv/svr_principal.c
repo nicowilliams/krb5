@@ -198,17 +198,21 @@ ks_tuple_present(int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
 static kadm5_ret_t
 apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
                      int n_ks_tuple, krb5_key_salt_tuple *ks_tuple,
-                     int *new_n_ks_tuple, krb5_key_salt_tuple **new_ks_tuple)
+                     int *new_n_kstp, krb5_key_salt_tuple **new_kstp)
 {
     kadm5_ret_t ret;
     kadm5_policy_ent_rec polent;
     int ak_n_ks_tuple = 0;
+    int new_n_ks_tuple = 0;
     krb5_key_salt_tuple *ak_ks_tuple = NULL;
+    krb5_key_salt_tuple *new_ks_tuple = NULL;
     krb5_key_salt_tuple *subset;
     int i, m;
 
-    *new_n_ks_tuple = 0;
-    *new_ks_tuple = NULL;
+    if (new_n_kstp != NULL) {
+        *new_n_kstp = 0;
+        *new_kstp = NULL;
+    }
 
     memset(&polent, 0, sizeof(polent));
     if (policy != NULL &&
@@ -220,7 +224,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
             goto cleanup;
     }
 
-    if (polent.allowed_keysalts == NULL) {
+    if (polent.allowed_keysalts == NULL && new_n_kstp != NULL) {
         /* Requested keysalts allowed or default to supported_enctypes. */
         if (n_ks_tuple == 0) {
             /* Default to supported_enctypes. */
@@ -228,13 +232,13 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
             ks_tuple = handle->params.keysalts;
         }
         /* Dup the requested or defaulted keysalt tuples. */
-        *new_ks_tuple = malloc(n_ks_tuple * sizeof(**new_ks_tuple));
-        if (*new_ks_tuple == NULL) {
+        new_ks_tuple = malloc(n_ks_tuple * sizeof(*new_ks_tuple));
+        if (new_ks_tuple == NULL) {
             ret = ENOMEM;
             goto cleanup;
         }
-        memcpy(*new_ks_tuple, ks_tuple, n_ks_tuple * sizeof(**new_ks_tuple));
-        *new_n_ks_tuple = n_ks_tuple;
+        memcpy(new_ks_tuple, ks_tuple, n_ks_tuple * sizeof(*new_ks_tuple));
+        new_n_ks_tuple = n_ks_tuple;
         ret = 0;
         goto cleanup;
     }
@@ -262,8 +266,8 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
 
     /* Have policy but no ks_tuple input?  Output the policy. */
     if (n_ks_tuple == 0) {
-        *new_n_ks_tuple = ak_n_ks_tuple;
-        *new_ks_tuple = ak_ks_tuple;
+        new_n_ks_tuple = ak_n_ks_tuple;
+        new_ks_tuple = ak_ks_tuple;
         ak_ks_tuple = NULL;
         goto cleanup;
     }
@@ -283,13 +287,20 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
         if (!ks_tuple_present(n_ks_tuple, ks_tuple, &ak_ks_tuple[i]))
             subset[m++] = ak_ks_tuple[i];
     }
-    *new_ks_tuple = subset;
-    *new_n_ks_tuple = m;
+    new_ks_tuple = subset;
+    new_n_ks_tuple = m;
     ret = 0;
 
 cleanup:
     kadm5_free_policy_ent(handle->lhandle, &polent);
     free(ak_ks_tuple);
+
+    if (new_n_kstp != NULL) {
+        *new_n_kstp = new_n_ks_tuple;
+        *new_kstp = new_ks_tuple;
+    } else {
+        free(new_ks_tuple);
+    }
     return ret;
 }
 
@@ -1971,6 +1982,26 @@ kadm5_setkey_principal(void *server_handle,
                                  keyblocks, n_keys);
 }
 
+/* Make key/salt list from keys for kadm5_setkey_principal_3() */
+static kadm5_ret_t
+make_ks_from_keys(krb5_context context,
+                  int n_keys,
+                  krb5_keyblock *keyblocks,
+                  krb5_key_salt_tuple **ks_tuple)
+{
+    int i;
+
+    *ks_tuple = calloc(n_keys, sizeof(**ks_tuple));
+    if (ks_tuple == NULL)
+        return ENOMEM;
+
+    for (i = 0; i < n_keys; i++) {
+        (*ks_tuple)[i].ks_enctype = keyblocks[i].enctype;
+        (*ks_tuple)[i].ks_salttype = KRB5_KDB_SALTTYPE_NORMAL;
+    }
+    return 0;
+}
+
 kadm5_ret_t
 kadm5_setkey_principal_3(void *server_handle,
                          krb5_principal principal,
@@ -1995,8 +2026,7 @@ kadm5_setkey_principal_3(void *server_handle,
     krb5_key_data         tmp_key_data;
     krb5_key_data        *tptr;
     krb5_keyblock               *act_mkey;
-    int                         new_n_ks_tuple = 0;
-    krb5_key_salt_tuple         *new_ks_tuple = NULL;
+    krb5_key_salt_tuple         *ks_from_keys = NULL;
 
     CHECK_HANDLE(server_handle);
 
@@ -2012,9 +2042,14 @@ kadm5_setkey_principal_3(void *server_handle,
     if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
         return(ret);
 
-    ret = apply_keysalt_policy(handle, adb.policy, n_ks_tuple, ks_tuple,
-                               &new_n_ks_tuple, &new_ks_tuple);
-    free(new_ks_tuple);         /* We have no use for new_*ks_tuple here. */
+    /* Apply policy to the key/salt types implied by the given keys */
+    ret = make_ks_from_keys(handle->context, n_keys, keyblocks,
+                            &ks_from_keys);
+    if (ret)
+        goto done;
+    ret = apply_keysalt_policy(handle, adb.policy, n_keys, ks_from_keys,
+                               NULL, NULL);
+    free(ks_from_keys);
     if (ret)
         goto done;
 

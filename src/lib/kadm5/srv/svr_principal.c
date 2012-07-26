@@ -1984,9 +1984,7 @@ kadm5_setkey_principal(void *server_handle,
 
 /* Make key/salt list from keys for kadm5_setkey_principal_3() */
 static kadm5_ret_t
-make_ks_from_keys(krb5_context context,
-                  int n_keys,
-                  krb5_keyblock *keyblocks,
+make_ks_from_keys(krb5_context context, int n_keys, krb5_keyblock *keyblocks,
                   krb5_key_salt_tuple **ks_tuple)
 {
     int i;

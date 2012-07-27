@@ -2040,14 +2040,25 @@ kadm5_setkey_principal_3(void *server_handle,
     if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
         return(ret);
 
-    /* Apply policy to the key/salt types implied by the given keys */
-    ret = make_ks_from_keys(handle->context, n_keys, keyblocks,
-                            &ks_from_keys);
-    if (ret)
-        goto done;
-    ret = apply_keysalt_policy(handle, adb.policy, n_keys, ks_from_keys,
-                               NULL, NULL);
-    free(ks_from_keys);
+    if (!n_ks_tuple) {
+        /* Apply policy to the key/salt types implied by the given keys */
+        ret = make_ks_from_keys(handle->context, n_keys, keyblocks,
+                                &ks_from_keys);
+        if (ret)
+            goto done;
+        ret = apply_keysalt_policy(handle, adb.policy, n_keys, ks_from_keys,
+                                   NULL, NULL);
+        free(ks_from_keys);
+    } else {
+        /*
+         * Apply policy to the given ks_tuples.  Note that further below
+         * we enforce keyblocks[i].enctype == ks_tuple[i].ks_enctype for
+         * all i from 0 to n_keys, and that n_ks_tuple == n_keys if ks
+         * tuples are given.
+         */
+        ret = apply_keysalt_policy(handle, adb.policy, n_ks_tuple, ks_tuple,
+                                   NULL, NULL);
+    }
     if (ret)
         goto done;
 

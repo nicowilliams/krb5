@@ -284,7 +284,7 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
         goto cleanup;
     }
     for (m = 0, i = 0; i < ak_n_ks_tuple && m < n_ks_tuple; i++) {
-        if (!ks_tuple_present(n_ks_tuple, ks_tuple, &ak_ks_tuple[i]))
+        if (ks_tuple_present(n_ks_tuple, ks_tuple, &ak_ks_tuple[i]))
             subset[m++] = ak_ks_tuple[i];
     }
     new_ks_tuple = subset;
@@ -1708,13 +1708,6 @@ kadm5_randkey_principal_3(void *server_handle,
 
     if (principal == NULL)
         return EINVAL;
-    if (krb5_principal_compare(handle->context, principal, hist_princ)) {
-        /* If changing the history entry, the new entry must have exactly one
-         * key. */
-        if (keepold)
-            return KADM5_PROTECT_PRINCIPAL;
-        n_ks_tuple = 1;
-    }
 
     if ((ret = kdb_get_entry(handle, principal, &kdb, &adb)))
         return(ret);
@@ -1723,6 +1716,14 @@ kadm5_randkey_principal_3(void *server_handle,
                                &new_n_ks_tuple, &new_ks_tuple);
     if (ret)
         goto done;
+
+    if (krb5_principal_compare(handle->context, principal, hist_princ)) {
+        /* If changing the history entry, the new entry must have exactly one
+         * key. */
+        if (keepold)
+            return KADM5_PROTECT_PRINCIPAL;
+        new_ks_tuple = 1;
+    }
 
     ret = krb5_dbe_find_act_mkey(handle->context, active_mkey_list, NULL,
                                  &act_mkey);

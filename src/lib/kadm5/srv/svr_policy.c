@@ -387,6 +387,7 @@ kadm5_modify_policy_internal(void *server_handle,
             p->max_renewable_life = entry->max_renewable_life;
         if ((mask & KADM5_POLICY_ALLOWED_KEYSALTS)) {
             krb5_db_free(handle->context, p->allowed_keysalts);
+            p->allowed_keysalts = NULL;
             if (entry->allowed_keysalts != NULL) {
                 len = strlen(entry->allowed_keysalts) + 1;
                 p->allowed_keysalts = krb5_db_alloc(handle->context, NULL,
@@ -395,6 +396,7 @@ kadm5_modify_policy_internal(void *server_handle,
                     ret = ENOMEM;
                     goto cleanup;
                 }
+                memcpy(p->allowed_keysalts, entry->allowed_keysalts, len);
             }
         }
         if ((mask & KADM5_POLICY_TL_DATA)) {

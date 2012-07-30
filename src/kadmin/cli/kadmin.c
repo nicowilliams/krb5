@@ -1571,15 +1571,17 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
 
             if (++i > argc - 2)
                 return -1;
-            retval = krb5_string_to_keysalts(argv[i], ",", ":.-", 0,
-                                             &ks_tuple, &n_ks_tuple);
-            if (retval) {
-                com_err(caller, retval, _("while parsing keysalts %s"),
-                        argv[i]);
-                return -1;
+            if (strcmp(argv[i], "-")) {
+                retval = krb5_string_to_keysalts(argv[i], ",", ":.-", 0,
+                                                 &ks_tuple, &n_ks_tuple);
+                if (retval) {
+                    com_err(caller, retval, _("while parsing keysalts %s"),
+                            argv[i]);
+                    return -1;
+                }
+                free(ks_tuple);
+                policy->allowed_keysalts = argv[i];
             }
-            free(ks_tuple);
-            policy->allowed_keysalts = argv[i];
             *mask |= KADM5_POLICY_ALLOWED_KEYSALTS;
             continue;
         } else

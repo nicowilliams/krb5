@@ -7,14 +7,8 @@ krb5_conf1 = {'all': {'libdefaults': {
 
 realm = K5Realm(krb5_conf=krb5_conf1, create_host=False, get_creds=False)
 
-# Add policies.
+# Add policy
 realm.run_kadminl('addpol -allowedkeysalts aes256-cts:normal ak1')
-realm.run_kadminl('addpol -allowedkeysalts '
-                  'aes256-cts:normal,rc4-hmac:normal ak2')
-output = realm.run_kadminl('getpol ak2')
-if not 'Allowed key/salt types: aes256-cts:normal,rc4-hmac:normal' in output:
-    fail('getpol does not implement allowedkeysalts?')
-
 realm.run_kadminl('addprinc -randkey -e aes256-cts:normal server')
 
 # Test with one-enctype allowed_keysalts.
@@ -32,11 +26,22 @@ realm.run_kadminl('getprinc server')
 # Now test a multi-enctype allowed_keysalts.  Test that subsets are allowed,
 # the the complete set is allowed, that order doesn't matter, and that
 # enctypes outside the set are not allowed.
-realm.run_kadminl('modprinc -policy ak2 server')
+
+# Test modpol
+realm.run_kadminl('modpol -allowedkeysalts '
+                  'aes256-cts:normal,rc4-hmac:normal ak1')
+output = realm.run_kadminl('getpol ak1')
+if not 'Allowed key/salt types: aes256-cts:normal,rc4-hmac:normal' in output:
+    fail('getpol does not implement allowedkeysalts?')
+realm.run_kadminl('modprinc -policy ak1 server')
+
+# Test one subset
 output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal server')
 if 'Invalid key/salt tuples' in output:
     fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
+
+# Test another subset
 output = realm.run_kadminl('cpw -randkey -e aes256-cts:normal server')
 if 'Invalid key/salt tuples' in output:
     fail('allowed_keysalts policy not applied properly')
@@ -46,6 +51,8 @@ output = realm.run_kadminl('cpw -randkey -e '
 if 'Invalid key/salt tuples' in output:
     fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
+
+# Test full set
 output = realm.run_kadminl('cpw -randkey -e aes256-cts:normal,rc4-hmac:normal '
                            'server')
 if 'Invalid key/salt tuples' in output:
@@ -56,11 +63,21 @@ output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal,aes128-cts:normal '
 if not 'Invalid key/salt tuples' in output:
     fail('allowed_keysalts policy not applied properly')
 realm.run_kadminl('getprinc server')
+output = realm.run_kadminl('getprinc -terse server')
+if not '2\t1\t6\t18\t0\t1\t6\t23\t0' in output:
+    fail('allowed_keysalts policy did not preserve order')
+
+# Test full set in oppositie order
 output = realm.run_kadminl('cpw -randkey -e rc4-hmac:normal,aes256-cts:normal,'
                            'aes128-cts:normal server')
 if not 'Invalid key/salt tuples' in output:
     fail('allowed_keysalts policy not applied properly')
+
+# XXX Should check that the order we got is the one from the policy
 realm.run_kadminl('getprinc server')
+output = realm.run_kadminl('getprinc -terse server')
+if not '2\t1\t6\t18\t0\t1\t6\t23\t0' in output:
+    fail('allowed_keysalts policy did not preserve order')
 realm.stop()
 
 success('allowed_keysalts')

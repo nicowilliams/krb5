@@ -1571,7 +1571,7 @@ kadmin_parse_policy_args(int argc, char *argv[], kadm5_policy_ent_t policy,
 
             if (++i > argc - 2)
                 return -1;
-            retval = krb5_string_to_keysalts(argv[i], ", ", ":.-", 0,
+            retval = krb5_string_to_keysalts(argv[i], ",", ":.-", 0,
                                              &ks_tuple, &n_ks_tuple);
             if (retval) {
                 com_err(caller, retval, _("while parsing keysalts %s"),

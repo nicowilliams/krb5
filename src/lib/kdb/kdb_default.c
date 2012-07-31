@@ -127,6 +127,9 @@ krb5_dbe_def_search_enctype(kcontext, dbentp, start, ktype, stype, kvno, kdatap)
                                     &ignore_permitted_enctypes);
 
     ret = 0;
+    if (ktype != -1 && !krb5_is_permitted_enctype(kcontext, ktype))
+        return KRB5_KDB_NO_PERMITTED_KEY;
+
     if (kvno == -1 && stype == -1 && ktype == -1)
         kvno = 0;
 

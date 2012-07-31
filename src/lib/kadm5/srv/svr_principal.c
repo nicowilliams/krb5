@@ -225,6 +225,18 @@ apply_keysalt_policy(kadm5_server_handle_t handle, const char *policy,
             goto cleanup;
     }
 
+    /* Local patch: policies named "strong_*" get a strong default */
+    if (polent.allowed_keysalts == NULL && policy != NULL &&
+	!strncmp(policy, "strong_", strlen("strong_"))) {
+	polent.allowed_keysalts = strdup("aes256-cts:normal,aes128-cts:normal,"
+					 "rc4-hmac:normal,"
+					 "des3-cbc-sha1:normal");
+	if (polent.allowed_keysalts == NULL) {
+	    ret = ENOMEM;
+	    goto cleanup;
+	}
+    }
+
     if (polent.allowed_keysalts == NULL && new_n_kstp != NULL) {
         /* Requested keysalts allowed or default to supported_enctypes. */
         if (n_ks_tuple == 0) {

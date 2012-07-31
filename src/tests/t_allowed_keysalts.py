@@ -3,7 +3,8 @@ from k5test import *
 import re
 
 krb5_conf1 = {'all': {'libdefaults': {
-            'supported_enctypes': 'aes256-cts'}}}
+            'supported_enctypes': 'aes256-cts',
+	    'allow_weak_crypto': 'true'}}}
 
 realm = K5Realm(krb5_conf=krb5_conf1, create_host=False, get_creds=False)
 
@@ -85,6 +86,20 @@ if 'Allowed key/salt types' in output:
     fail('failed to clear allowedkeysalts')
 output = realm.run_kadminl('cpw -randkey -e aes128-cts:normal server')
 if 'Invalid key/salt tuples' in output:
+    fail('key change rejected that should have been permitted')
+realm.run_kadminl('getprinc server')
+output = realm.run_kadminl('cpw -randkey -e des-cbc-crc:normal server')
+if 'Invalid key/salt tuples' in output:
+    fail('key change rejected that should have been permitted')
+realm.run_kadminl('getprinc server')
+
+# Test strong_*
+realm.run_kadminl('addpol strong_human')
+output = realm.run_kadminl('getpol strong_human')
+if 'Allowed key/salt types' in output:
+    fail('new policy w/ default content has allowed keysalts')
+output = realm.run_kadminl('cpw -randkey -e des-cbc-crc:normal server')
+if not 'Invalid key/salt tuples' in output:
     fail('key change rejected that should have been permitted')
 realm.run_kadminl('getprinc server')
 

@@ -395,7 +395,7 @@ int main(int argc, char *argv[])
 #endif
 #undef server_handle
         || (ret = loop_setup_routing_socket(ctx, global_server_handle, whoami))
-        || (ret = loop_setup_network(ctx, global_server_handle, whoami))) {
+        || (ret = loop_setup_network(ctx, global_server_handle, whoami, -1))) {
         const char *e_txt = krb5_get_error_message (context, ret);
         krb5_klog_syslog(LOG_ERR, _("%s: %s while initializing network, "
                                     "aborting"), whoami, e_txt);

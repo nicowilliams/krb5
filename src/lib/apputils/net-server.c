@@ -1103,7 +1103,7 @@ static void
 do_network_reconfig(verto_ctx *ctx, verto_ev *ev)
 {
     struct connection *conn = verto_get_private(ev);
-    assert(loop_setup_network(ctx, conn->handle, conn->prog) == 0);
+    assert(loop_setup_network(ctx, conn->handle, conn->prog, -1) == 0);
 }
 
 static int
@@ -1259,7 +1259,7 @@ loop_setup_routing_socket(verto_ctx *ctx, void *handle, const char *progname)
 extern void (*krb5int_sendtokdc_debug_handler)(const void*, size_t);
 
 krb5_error_code
-loop_setup_network(verto_ctx *ctx, void *handle, const char *prog)
+loop_setup_network(verto_ctx *ctx, void *handle, const char *prog, int inetd_fd)
 {
     struct socksetup setup_data;
     verto_ev *ev;
@@ -1285,15 +1285,41 @@ loop_setup_network(verto_ctx *ctx, void *handle, const char *prog)
      * supported.
      */
     setup_data.udp_flags = UDP_DO_IPV4 | UDP_DO_IPV6;
-    setup_udp_pktinfo_ports(&setup_data);
-    if (setup_data.udp_flags) {
-        if (foreach_localaddr (&setup_data, setup_udp_port, 0, 0)) {
-            return setup_data.retval;
+    if (inetd_fd > -1) {
+        int type, len;
+
+        len = sizeof (type);
+        if (getsockopt(inetd_fd, SOL_SOCKET, SO_TYPE, &type, &len)) {
+            com_err(prog, 0, _("getsockopt() on inetd socket failed"));
+            exit (1);
         }
+
+
+        if (type == SOCK_DGRAM) {
+            if (add_udp_fd(&setup_data, inetd_fd, 0) == 0) {
+                com_err(prog, 0, _("Failed to add UDP socket from inetd "
+                                   "to event loop"));
+                exit (1);
+            }
+        } else { /* XXX Should we check type here? */
+            if (add_tcp_listener_fd(&setup_data, inetd_fd) == NULL) {
+                com_err(prog, 0, _("Failed to add TCP socket from inetd "
+                                   "to event loop"));
+                exit (1);
+            }
+        }
+        krb5_klog_syslog(LOG_INFO, _("listening on inetd fd\n"));
+    } else {
+        setup_udp_pktinfo_ports(&setup_data);
+        if (setup_data.udp_flags) {
+            if (foreach_localaddr (&setup_data, setup_udp_port, 0, 0)) {
+                return setup_data.retval;
+            }
+        }
+        setup_tcp_listener_ports(&setup_data);
+        setup_rpc_listener_ports(&setup_data);
+        krb5_klog_syslog (LOG_INFO, _("set up %d sockets"), (int) events.n);
     }
-    setup_tcp_listener_ports(&setup_data);
-    setup_rpc_listener_ports(&setup_data);
-    krb5_klog_syslog (LOG_INFO, _("set up %d sockets"), (int) events.n);
     if (events.n == 0) {
         com_err(prog, 0, _("no sockets set up?"));
         exit (1);

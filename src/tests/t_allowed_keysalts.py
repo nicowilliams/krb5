@@ -98,9 +98,10 @@ realm.run_kadminl('addpol strong_human')
 output = realm.run_kadminl('getpol strong_human')
 if 'Allowed key/salt types' in output:
     fail('new policy w/ default content has allowed keysalts')
+realm.run_kadminl('modprinc -policy strong_human server')
 output = realm.run_kadminl('cpw -randkey -e des-cbc-crc:normal server')
 if not 'Invalid key/salt tuples' in output:
-    fail('key change rejected that should have been permitted')
+    fail('key change permitted that should have been rejected')
 realm.run_kadminl('getprinc server')
 
 realm.stop()

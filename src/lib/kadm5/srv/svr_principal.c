@@ -2390,7 +2390,9 @@ kadm5_ret_t kadm5_decrypt_key(void *server_handle,
     if (entry->n_key_data == 0 || entry->key_data == NULL)
         return EINVAL;
 
-    /* find_enctype only uses these two fields */
+    /* find_enctype only uses these three fields */
+    memset(&dbent,0,sizeof(dbent));
+    dbent.princ = entry->principal;
     dbent.n_key_data = entry->n_key_data;
     dbent.key_data = entry->key_data;
     if ((ret = krb5_dbe_find_enctype(handle->context, &dbent, ktype,

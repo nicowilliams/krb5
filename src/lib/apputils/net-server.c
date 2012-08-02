@@ -68,7 +68,7 @@
 #define KDC5_NONET                               (-1779992062L)
 
 static int tcp_or_rpc_data_counter;
-static int max_tcp_or_rpc_data_connections = 45;
+static int max_tcp_or_rpc_data_connections = 768;
 
 /* Misc utility routines.  */
 static void

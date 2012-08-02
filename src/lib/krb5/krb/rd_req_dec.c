@@ -307,7 +307,7 @@ rd_req_decoded_opt(krb5_context context, krb5_auth_context *auth_context,
     }
 
     if (krb5int_libdefault_boolean(context, &server->realm,
-                                   "check-ticket-addresses",
+                                   "check_ticket_addresses",
                                    &check_addrs))
         check_addrs = 0;
 

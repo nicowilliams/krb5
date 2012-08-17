@@ -40,7 +40,6 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 [\fB\-p\fP \fIkdb5_util_prog\fP]
 [\fB\-P\fP \fIport\fP]
 [\fB\-d\fP]
-[\fB\-S\fP]
 .SH DESCRIPTION
 .sp
 The \fIkpropd\fP command runs on the slave KDC server.  It listens for
@@ -56,8 +55,9 @@ Kerberos server to use \fIkprop(8)\fP to propagate its database to
 the slave servers.  Upon a successful download of the KDC database
 file, the slave Kerberos server will have an up\-to\-date KDC database.
 .sp
-Normally, kpropd is invoked out of inetd(8).  This is done by adding
-a line to the \fB/etc/inetd.conf\fP file which looks like this:
+kpropd can be invoked out of inetd(8) when incremental propagation is
+not enabled.  This is done by adding a line to the \fB/etc/inetd.conf\fP
+file which looks like this:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -69,9 +69,9 @@ kprop  stream  tcp  nowait  root  /usr/local/sbin/kpropd  kpropd
 .UNINDENT
 .UNINDENT
 .sp
-kpropd can also run as a standalone daemon by specifying the \fB\-S\fP
-option.  This is done for debugging purposes, or if for some reason
-the system administrator just doesn\(aqt want to run it out of inetd(8).
+If not started by inetd(8), kpropd will run as a standalone daemon.
+This is necessary for incremental propagation, and it is useful for
+debugging purposes.
 .sp
 Incremental propagation may be enabled with the \fBiprop_enable\fP
 variable in \fIkdc.conf(5)\fP.  If incremental propagation is

@@ -42,8 +42,6 @@ kpropd \- Kerberos V5 slave KDC update server
 ] [
 .B \-d
 ] [
-.B \-S
-] [
 .B \-P
 .I port
 ]
@@ -76,11 +74,10 @@ this:
 
 kprop	stream	tcp	nowait	root	/usr/local/sbin/kpropd	kpropd
 
-However, kpropd can also run as a standalone daemon, if the
-.B \-S
-option is turned on.  This is done for debugging purposes, or if for
-some reason the system administrator just doesn't want to run it out of
-.IR inetd (8).
+If kpropd is not started from
+.IR inetd (8)
+then it will be in standalone mode.  Standalong mode is required for
+incremental propagation.
 
 When the slave periodically requests incremental updates,
 .I kpropd

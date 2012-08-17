@@ -107,7 +107,23 @@ For each realm, the following tags may be specified in the [realms] subsection:
 **iprop_slave_poll**
     This delta time string specfies how often the slave KDC polls for new updates from the master.  Default is "2m" (that is, two minutes).
 **iprop_port**
-    (Port number.) This specifies the port number to be used for incremental propagation. This is required in both master and slave configuration files. 
+    (Port number.)  Specifies the port number to be used for
+    incremental propagation.  This is required in both master and
+    slave configuration files.
+
+**iprop_dump_tmout**
+    (Delta time string.)  Specifies the amount of time to wait for a
+    full propagation to begin (this relates primarily to the time it
+    takes to dump the KDB on the master KDC).  This is optional in
+    configuration files, and is used by slave KDCs only.  The default
+    value is 5 minutes (``5m``).
+
+**iprop_full_progress_tmout**
+    (Delta time string.)  Specifies the amount of time to wait for
+    progress in full propagation dump transfers.  This is optional in
+    configuration files, and is used by slave KDCs only.  The default
+    value is 10 seconds (``10s``).
+
 **iprop_logfile**
     (File name) This specifies where the update log file for the realm database is to be stored. The default is to use the *database_name* entry from the realms section of the krb5 config file, with *.ulog* appended. (NOTE: If *database_name* isn't specified in the realms section, perhaps because the LDAP database back end is being used, or the file name is specified in the *dbmodules* section, then the hard-coded default for *database_name* is used. Determination of the *iprop_logfile* default value will not use values from the *dbmodules* section.) 
 **kadmind_port**

@@ -246,7 +246,6 @@ static kdb_fullresync_result_t *
 ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 {
     static kdb_fullresync_result_t ret;
-    char *tmpf = 0;
     char *ubuf = 0;
     char clhost[MAXHOSTNAMELEN] = {0};
     int pret, fret;
@@ -320,23 +319,20 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
     }
 
     /*
-     * construct db dump file name; kprop style name + clnt fqdn
-     */
-    if (asprintf(&tmpf, "%s_%s", KPROP_DEFAULT_FILE, clhost) < 0) {
-	krb5_klog_syslog(LOG_ERR,
-			 _("%s: unable to construct db dump file name; out of memory"),
-			 whoami);
-	goto out;
-    }
-
-    /*
-     * note the -i; modified version of kdb5_util dump format
+     * Note the -i; modified version of kdb5_util dump format
      * to include sno (serial number). This argument is now
      * versioned (-i0 for legacy dump format, -i1 for ipropx
-     * version 1 format, etc)
+     * version 1 format, etc).
+     *
+     * The -c option ("conditional") causes the dump to dump only if no
+     * dump already exists or that dump is not in ipropx format, or the
+     * sno and timestamp in the header of that dump are outside the
+     * ulog.  This allows us to share a single global dump with all
+     * slaves.
      */
-    if (asprintf(&ubuf, "%s dump -i%d %s </dev/null 2>&1",
-		 KPROPD_DEFAULT_KDB5_UTIL, vers, tmpf) < 0) {
+    /* XXX Make dump file path configurable!! */
+    if (asprintf(&ubuf, "%s dump -i%d -c %s </dev/null 2>&1",
+		 KPROPD_DEFAULT_KDB5_UTIL, vers, KPROP_DEFAULT_FILE) < 0) {
 	krb5_klog_syslog(LOG_ERR,
 			 _("%s: cannot construct kdb5 util dump string too long; out of memory"),
 			 whoami);
@@ -384,15 +380,15 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	}
 
 	DPRINT(("%s: exec `kprop -f %s %s' ...\n",
-		whoami, tmpf, clhost));
+		whoami, KPROP_DEFAULT_FILE, clhost));
 	/* XXX Yuck!  */
 	if (getenv("KPROP_PORT"))
-	    pret = execl(KPROPD_DEFAULT_KPROP, "kprop", "-f", tmpf,
-			 "-P", getenv("KPROP_PORT"),
-			 clhost, NULL);
+	    pret = execl(KPROPD_DEFAULT_KPROP, "kprop", "-f",
+                         KPROP_DEFAULT_FILE, "-P", getenv("KPROP_PORT"),
+                         clhost, NULL);
 	else
-	    pret = execl(KPROPD_DEFAULT_KPROP, "kprop", "-f", tmpf,
-			 clhost, NULL);
+            pret = execl(KPROPD_DEFAULT_KPROP, "kprop", "-f",
+                         KPROP_DEFAULT_FILE, clhost, NULL);
 	if (pret == -1) {
 	    if (nofork) {
 		perror(whoami);
@@ -427,7 +423,6 @@ out:
     free(service_name);
     if (name)
 	gss_release_name(&min_stat, &name);
-    free(tmpf);
     free(ubuf);
     return (&ret);
 }

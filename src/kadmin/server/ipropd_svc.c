@@ -246,10 +246,10 @@ static kdb_fullresync_result_t *
 ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 {
     static kdb_fullresync_result_t ret;
-    char *tmpf = 0;
     char *ubuf = 0;
     char clhost[MAXHOSTNAMELEN] = {0};
     int pret, fret;
+    FILE *p;
     kadm5_server_handle_t handle = global_server_handle;
     OM_uint32 min_stat;
     gss_name_t name = NULL;
@@ -320,23 +320,21 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
     }
 
     /*
-     * construct db dump file name; kprop style name + clnt fqdn
-     */
-    if (asprintf(&tmpf, "%s_%s", KPROP_DEFAULT_FILE, clhost) < 0) {
-	krb5_klog_syslog(LOG_ERR,
-			 _("%s: unable to construct db dump file name; out of memory"),
-			 whoami);
-	goto out;
-    }
-
-    /*
-     * note the -i; modified version of kdb5_util dump format
+     * Note the -i; modified version of kdb5_util dump format
      * to include sno (serial number). This argument is now
      * versioned (-i0 for legacy dump format, -i1 for ipropx
-     * version 1 format, etc)
+     * version 1 format, etc).
+     *
+     * The -c option ("conditional") causes the dump to dump only if no
+     * dump already exists or that dump is not in ipropx format, or the
+     * sno and timestamp in the header of that dump are outside the
+     * ulog.  This allows us to share a single global dump with all
+     * slaves, since it's OK to share an older dump, as long as its sno
+     * and timestamp are in the ulog (then the slaves can get the
+     * subsequent updates very iprop).
      */
-    if (asprintf(&ubuf, "%s dump -i%d %s </dev/null 2>&1",
-		 KPROPD_DEFAULT_KDB5_UTIL, vers, tmpf) < 0) {
+    if (asprintf(&ubuf, "%s dump -i%d -c %s",
+		 kdb5_util, vers, dump_file) < 0) {
 	krb5_klog_syslog(LOG_ERR,
 			 _("%s: cannot construct kdb5 util dump string too long; out of memory"),
 			 whoami);
@@ -366,8 +364,17 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	DPRINT(("%s: run `%s' ...\n", whoami, ubuf));
 	(void) signal(SIGCHLD, SIG_DFL);
 	/* run kdb5_util(1M) dump for IProp */
-	/* XXX popen can return NULL; is pclose(NULL) okay?  */
-	pret = pclose(popen(ubuf, "w"));
+	DPRINT(("%s: pclose=%d\n", whoami, pret));
+        p = popen(ubuf, "w");
+        if (p == NULL) {
+	    krb5_klog_syslog(LOG_ERR,
+			     _("%s: popen failed: %s"),
+			     whoami, error_message(errno));
+	    _exit(1);
+        }
+	pret = pclose(p);
+        fprintf(stderr, "pret = %d\n", pret);
+        fflush(stderr);
 	DPRINT(("%s: pclose=%d\n", whoami, pret));
 	if (pret != 0) {
 	    /* XXX popen/pclose may not set errno
@@ -387,22 +394,16 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 		whoami, tmpf, clhost));
 	/* XXX Yuck!  */
 	if (getenv("KPROP_PORT"))
-	    pret = execl(KPROPD_DEFAULT_KPROP, "kprop", "-f", tmpf,
-			 "-P", getenv("KPROP_PORT"),
-			 clhost, NULL);
+            pret = execl(kprop, "kprop", "-f", dump_file, "-P",
+                         getenv("KPROP_PORT"), clhost, NULL);
 	else
-	    pret = execl(KPROPD_DEFAULT_KPROP, "kprop", "-f", tmpf,
-			 clhost, NULL);
-	if (pret == -1) {
-	    if (nofork) {
-		perror(whoami);
-	    }
-	    krb5_klog_syslog(LOG_ERR,
-			     _("%s: exec failed: %s"),
-			     whoami,
-			     error_message(errno));
-	    _exit(1);
-	}
+            pret = execl(kprop, "kprop", "-f", dump_file, clhost, NULL);
+        perror(whoami);
+        krb5_klog_syslog(LOG_ERR,
+                         _("%s: exec failed: %s"),
+                         whoami,
+                         error_message(errno));
+        _exit(1);
 
     default: /* parent */
 	ret.ret = UPDATE_OK;
@@ -411,6 +412,9 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	ret.lastentry.last_time.seconds = 0;
 	ret.lastentry.last_time.useconds = 0;
 
+        DPRINT(("%s: spawned resync process %d, client=%s, "
+                "service=%s, addr=%s\n", whoami, fret, client_name,
+                service_name, client_addr(rqstp)));
 	krb5_klog_syslog(LOG_NOTICE,
 			 _("Request: %s, spawned resync process %d, client=%s, service=%s, addr=%s"),
 			 whoami, fret,
@@ -427,7 +431,6 @@ out:
     free(service_name);
     if (name)
 	gss_release_name(&min_stat, &name);
-    free(tmpf);
     free(ubuf);
     return (&ret);
 }

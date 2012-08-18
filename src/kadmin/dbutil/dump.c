@@ -2718,7 +2718,11 @@ load_db(argc, argv)
      * Auto-detect dump version if we weren't told, verify if we
      * were told.
      */
-    fgets(buf, sizeof(buf), f);
+    if (fgets(buf, sizeof(buf), f) == NULL) {
+        exit_status++;
+        if (f != stdin) fclose(f);
+        return;
+    }
     if (load) {
         /* only check what we know; some headers only contain a prefix */
         /* NB: this should work for ipropx even though load is iprop */

@@ -102,6 +102,8 @@ extern int daemon(int, int);
 
 #define SYSLOG_CLASS LOG_DAEMON
 #define INITIAL_TIMER 10
+#define INITIAL_FULL_TIMER 60
+#define MAX_FULL_TIMER 300
 
 char *def_realm = NULL;
 int runonce = 0;
@@ -176,6 +178,13 @@ static void usage()
     fprintf(stderr, _("\t[-F kerberos_db_file ] [-p kdb5_util_pathname]\n"));
     fprintf(stderr, _("\t[-x db_args]* [-P port] [-a acl_file]\n"));
     exit(1);
+}
+
+static
+void
+alarm_handler(int sig)
+{
+    /* Nothing to do, just catch the signal */
 }
 
 int
@@ -400,15 +409,6 @@ void doit(fd)
     int database_fd;
     char host[INET6_ADDRSTRLEN+1];
 
-    if (kpropd_context->kdblog_context &&
-        kpropd_context->kdblog_context->iproprole == IPROP_SLAVE) {
-        /*
-         * We also want to set a timer so that the slave is not waiting
-         * until infinity for an update from the master.
-         */
-        if (debug)
-            fprintf(stderr, "doit: setting resync alarm to 5s\n");
-    }
     fromlen = sizeof (from);
     if (getpeername(fd, (struct sockaddr *) &from, &fromlen) < 0) {
 #ifdef ENOTSOCK
@@ -549,6 +549,31 @@ full_resync(CLIENT *clnt)
     return (status == RPC_SUCCESS) ? &clnt_res : NULL;
 }
 
+static
+int
+read_var(int fd, void *buf, size_t sz, int *eintr)
+{
+    ssize_t bytes;
+    size_t bytes_read;
+    char *p = buf;
+
+    for (bytes_read = 0; bytes_read != sz; p += bytes, bytes_read += bytes) {
+        bytes = read(fd, p, sz);
+        if (bytes == -1 && errno != EINTR) {
+            syslog(LOG_ERR,
+                    "I/O error while reading status of full resync\n");
+            fprintf(stderr,
+                    _("Could not read status of full resync\n"));
+            exit(1);
+        } else if (bytes == -1) {
+            *eintr = 1;
+            if (bytes_read == 0)
+                return 0;
+        }
+    }
+    return 1;
+}
+
 /*
  * Routine to handle incremental update transfer(s) from master KDC
  */
@@ -566,6 +591,7 @@ krb5_error_code do_iprop(kdb_log_context *log_ctx, int rfd)
     int reinit_cnt = 0;
     int frdone = 0;
     int prop_status;
+    int fullprop_timer;
     time_t start_time = 0;
     time_t finish_time;
 
@@ -770,29 +796,38 @@ reinit:
                  * Now we wait for notice of successful prop from the
                  * child that's running do_standalone().
                  */
+                fullprop_timer = INITIAL_FULL_TIMER;
                 do {
-                    ssize_t bytes;
-
-                    /* XXX We should use async I/O here or alarm() to
+                    int eintr = 0;
+                    /*
+                     * XXX We should use async I/O here or alarm() to
                      * ensure that we don't wait forever for a prop that
                      * will not happen (e.g., the KDC died before it
                      * could finish it).
                      */
-                    bytes = read(rfd, &finish_time, sizeof(finish_time));
-                    if (bytes != sizeof(finish_time)) {
-                        /* XXX panic, really?  yeah, probably */
-                        fprintf(stderr,
-                                _("Could not read status of full resync\n"));
-                        exit(1);
+                    signal(SIGALRM, alarm_handler);
+                    alarm(fullprop_timer);
+                    if (!read_var(rfd, &finish_time, sizeof(finish_time),
+                                  &eintr)) {
+                        /* If we never read finish_time then we're done */
+                        alarm(0);
+                        break;
                     }
+                    alarm(0);
+                    /* Else we try really hard to read prop_status */
+                    /*
+                     * XXX Well, if the child dies?  We should not loop
+                     * forever.  FIXME
+                     */
+                    for (; !read_var(rfd, &prop_status, sizeof(prop_status),
+                                     &eintr);)
+                        ;
 
-                    bytes = read(rfd, &prop_status, sizeof(prop_status));
-                    if (bytes != sizeof(prop_status)) {
-                        fprintf(stderr,
-                                _("Could not read status of full resync\n"));
-                        exit(1);
-                    }
-                } while (finish_time < start_time);
+                    if (eintr)
+                        fullprop_timer = (fullprop_timer * 15) / 10;
+
+                } while (finish_time < start_time &&
+                     fullprop_timer < MAX_FULL_TIMER);
 
                 if (!WIFEXITED(prop_status) || WEXITSTATUS(prop_status) != 0) {
                     if (debug)

@@ -245,8 +245,7 @@ main(argc, argv)
         com_err(progname, errno, _("do_iprop failed.\n"));
         break;
     case 0:
-        do_standalone(pipefds[1]);
-        /* XXX Should -t also work for do_standalone?  Why not? */
+	do_standalone(pipefds[1]);
         /* do_standalone() should never return */
         /* NOTREACHED */
         break;
@@ -373,15 +372,18 @@ do_standalone(int wfd)
             }
 
             close(s);
-            if (wfd == -1)
-                continue;
-
             /* Inform do_iprop() */
-            now = time(NULL);
-            write(wfd, &now, sizeof(now));
-            write(wfd, &status, sizeof(status));
+            if (wfd >= 0) {
+                now = time(NULL);
+                write(wfd, &now, sizeof(now));
+                write(wfd, &status, sizeof(status));
+            }
+
+            if (runonce)
+                break;
         }
     }
+    exit(0);
 }
 
 void doit(fd)

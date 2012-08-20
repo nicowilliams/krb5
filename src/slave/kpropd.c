@@ -279,6 +279,8 @@ main(argc, argv)
         com_err(progname, errno, _("couldn't create a pipe.\n"));
         exit(1);
     }
+    set_cloexec_fd(pipefds[0]);
+    set_cloexec_fd(pipefds[1]);
 
     signal(SIGHUP, SIG_DFL);
     fullprop_child = fork();

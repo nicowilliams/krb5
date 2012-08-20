@@ -256,15 +256,14 @@ main(argc, argv)
      * do_iprop() will read these from the child whenever it needs to
      * wait for a full resync.  See do_iprop().
      *
-     * XXX The rest of this should be a loop so we can restart when the
-     * child process dies.
+     * The rest of this could be a loop so we can restart when the child
+     * process dies.  But that might be pointless where there are good
+     * restarters.
      *
-     * XXX We should have a pidfile for the child so it can get killed
-     * too, no?  Or write two PIDs to the same pidfile?
-     *
-     * XXX We should try to kill the child if we get killed.  It's not
+     * We should try to kill the child if we get killed.  It's not
      * enough to let the child die with SIGPIPE if we abandon it and it
-     * still receives a fullprop.
+     * still receives a fullprop.  But again, with a decent external
+     * restarter we can avoid such complexity.
      */
     if (pipe(pipefds) == -1) {
         com_err(progname, errno, _("couldn't create a pipe.\n"));

@@ -235,15 +235,6 @@ main(argc, argv)
     if (!debug)
         daemon(0, 0);
 
-#ifdef PID_FILE
-    if ((pidfile = fopen(PID_FILE, "w")) != NULL) {
-        fprintf(pidfile, "%d\n", getpid());
-        fclose(pidfile);
-    } else
-        com_err(progname, errno,
-                _("while opening pid file %s for writing"), PID_FILE);
-#endif
-
     if (!standalone) {
         /* inetd nowait service */
         doit(0);

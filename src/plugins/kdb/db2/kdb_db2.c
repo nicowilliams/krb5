@@ -424,8 +424,7 @@ ctx_lock(krb5_context context, krb5_db2_context *dbc, int lockmode)
     if (dbc->db_locks_held == 0 || dbc->db_lock_mode < kmode) {
         /* Acquire or upgrade the lock. */
         for (tries = 0; tries < MAX_LOCK_TRIES; tries++) {
-            retval = krb5_lock_file(context, dbc->db_lf_file,
-                                    kmode | KRB5_LOCKMODE_DONTBLOCK);
+            retval = krb5_lock_file(context, dbc->db_lf_file, kmode);
             if (retval == 0)
                 break;
             if (retval == EBADF && kmode == KRB5_LOCKMODE_EXCLUSIVE)

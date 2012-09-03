@@ -121,6 +121,8 @@ keyword arguments:
 
 * start_kadmind=True: Start kadmind.
 
+* start_kpropd=True: Start kpropd.
+
 * get_creds=False: Don't get user credentials.
 
 Scripts may use the following functions and variables:
@@ -246,6 +248,9 @@ Scripts may use the following realm methods and attributes:
 
 * realm.start_kadmind(): Start a kadmind with the realm's master KDC
   environment.  Errors if a kadmind is already running.
+
+* realm.start_kpropd(): Start a kpropd with the realm's slave KDC
+  environment.  Errors if a kpropd is already running.
 
 * realm.stop_kadmind(): Stop the kadmind process.  Errors if no
   kadmind is running.
@@ -697,7 +702,8 @@ class K5Realm(object):
     def __init__(self, realm='KRBTEST.COM', portbase=61000, testdir='testdir',
                  krb5_conf=None, kdc_conf=None, create_kdb=True,
                  krbtgt_keysalt=None, create_user=True, get_creds=True,
-                 create_host=True, start_kdc=True, start_kadmind=False):
+                 create_host=True, start_kdc=True, start_kadmind=False,
+                 start_kpropd=False):
         global hostname, _default_krb5_conf, _default_kdc_conf
 
         self.realm = realm
@@ -716,6 +722,7 @@ class K5Realm(object):
         self._kdc_conf = _cfg_merge(_default_kdc_conf, kdc_conf)
         self._kdc_proc = None
         self._kadmind_proc = None
+        self._kpropd_proc = None
 
         self._create_empty_dir()
         self._create_krb5_conf('client')
@@ -747,6 +754,8 @@ class K5Realm(object):
             self.start_kdc()
         if start_kadmind and create_kdb:
             self.start_kadmind()
+        if start_kpropd and create_kdb:
+            self.start_kpropd()
         if get_creds and create_kdb and create_user and start_kdc:
             self.kinit(self.user_princ, password('user'))
             self.klist(self.user_princ)
@@ -886,7 +895,12 @@ class K5Realm(object):
     def start_kadmind(self):
         global krb5kdc
         assert(self._kadmind_proc is None)
-        self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W'],
+        self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W',
+                                            '-p', kdb5_util,
+                                            '-C', kprop,
+                                            '-F',
+                                            os.path.join(self.testdir,
+                                                    'master-dump')],
                                             self.env_master, 'starting...')
 
     def stop_kadmind(self):
@@ -894,11 +908,31 @@ class K5Realm(object):
         stop_daemon(self._kadmind_proc)
         self._kadmind_proc = None
 
+    def start_kpropd(self):
+        global krb5kdc
+        assert(self._kpropd_proc is None)
+        self._kpropd_proc = _start_daemon([kpropd, '-D', '-P',
+                                           os.environ['KPROP_PORT'],
+                                           '-f', os.path.join(self.testdir,
+                                               'incoming-slave-datatrans'),
+                                           '-p', kdb5_util, '-a',
+                                           os.path.join(self.testdir,
+                                               'kpropd-acl')],
+                                           self.env_slave,
+                                           'ready')
+
+    def stop_kpropd(self):
+        assert(self._kpropd_proc is not None)
+        stop_daemon(self._kpropd_proc)
+        self._kpropd_proc = None
+
     def stop(self):
         if self._kdc_proc:
             self.stop_kdc()
         if self._kadmind_proc:
             self.stop_kadmind()
+        if self._kpropd_proc:
+            self.stop_kpropd()
 
     def addprinc(self, princname, password=None):
         if password:

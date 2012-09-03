@@ -179,6 +179,9 @@ iprop_get_updates_1_svc(kdb_last_t *arg, struct svc_req *rqstp)
 			    NULL)) {
 	ret.ret = UPDATE_PERM_DENIED;
 
+        DPRINT(("%s: PERMISSION DENIED: clprinc=`%s'\n\tsvcprinc=`%s'\n",
+                whoami, client_name, service_name));
+
 	krb5_klog_syslog(LOG_NOTICE, LOG_UNAUTH, whoami,
 			 client_name, service_name,
 			 client_addr(rqstp));
@@ -199,6 +202,11 @@ iprop_get_updates_1_svc(kdb_last_t *arg, struct svc_req *rqstp)
 			replystr(ret.ret),
 			(unsigned long)arg->last_sno);
     }
+
+    DPRINT(("%s: request %s %s\n\tclprinc=`%s'\n\tsvcprinc=`%s'\n",
+            whoami, obuf,
+            ((kret == 0) ? "success" : error_message(kret)),
+            client_name, service_name));
 
     krb5_klog_syslog(LOG_NOTICE,
 		     _("Request: %s, %s, %s, client=%s, service=%s, addr=%s"),
@@ -278,6 +286,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	gss_buffer_desc client_desc, service_desc;
 
 	if (setup_gss_names(rqstp, &client_desc, &service_desc) < 0) {
+            DPRINT(("%s: setup_gss_names failed\n", whoami));
 	    krb5_klog_syslog(LOG_ERR,
 			     _("%s: setup_gss_names failed"),
 			     whoami);
@@ -288,6 +297,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	if (client_name == NULL || service_name == NULL) {
 	    free(client_name);
 	    free(service_name);
+            DPRINT(("%s: out of memory\n", whoami));
 	    krb5_klog_syslog(LOG_ERR,
 			     _("%s: out of memory recording principal names"),
 			     whoami);
@@ -305,6 +315,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 			    NULL)) {
 	ret.ret = UPDATE_PERM_DENIED;
 
+        DPRINT(("%s: Permission denied\n", whoami));
 	krb5_klog_syslog(LOG_NOTICE, LOG_UNAUTH, whoami,
 			 client_name, service_name,
 			 client_addr(rqstp));
@@ -352,6 +363,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	if (nofork) {
 	    perror(whoami);
 	}
+        DPRINT(("%s: fork failed\n", whoami));
 	krb5_klog_syslog(LOG_ERR,
 			 _("%s: fork failed: %s"),
 			 whoami,
@@ -407,6 +419,8 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	ret.lastentry.last_time.seconds = 0;
 	ret.lastentry.last_time.useconds = 0;
 
+        DPRINT(("%s: spawned resync process %d, client=%s, service=%s, addr=%s\n",
+                whoami, fret, client_name, service_name, client_addr(rqstp)));
 	krb5_klog_syslog(LOG_NOTICE,
 			 _("Request: %s, spawned resync process %d, client=%s, service=%s, addr=%s"),
 			 whoami, fret,

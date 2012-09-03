@@ -131,6 +131,7 @@ static char *kprop_version = KPROP_PROT_VERSION;
 
 char    *progname;
 int     debug = 0;
+int     debugdaemon = 0;
 char    *srvtab = 0;
 int     standalone = 0;
 
@@ -232,7 +233,7 @@ main(argc, argv)
 #endif
     }
 
-    if (!debug)
+    if (!debug || debugdaemon)
         daemon(0, 0);
 
     if (!standalone) {
@@ -397,14 +398,20 @@ do_standalone(int wfd)
             } while (wait_pid == -1 && errno == EINTR);
             if (wait_pid == -1) {
                 /* Something bad happened; panic. */
+                if (debug)
+                    fprintf(stderr, _("waitpid() failed to wait for doit() (%d %s)"), errno, strerror(errno));
                 com_err(progname, errno,
                         _("while waiting to receive database"));
                 exit(1);
             }
+            if (debug)
+                fprintf(stderr, _("doit() exited, maybe it succeeded?"));
 
             close(s);
             /* Inform do_iprop() */
             if (wfd >= 0) {
+                if (debug)
+                    fprintf(stderr, _("doit() exited; informing iprop parent process"));
                 report.finish_time = time(NULL);
                 write(wfd, &report, sizeof(report));
             }
@@ -772,6 +779,8 @@ reinit:
     handle = server_handle;
 
     for (;;) {
+        int rvret;
+
         incr_ret = NULL;
         full_ret = NULL;
 
@@ -788,6 +797,8 @@ reinit:
          * or (if needed) do a full resync of the krb5 db.
          */
 
+        if (debug)
+            fprintf(stderr, "Calling iprop_get_updates_1()\n");
         incr_ret = iprop_get_updates_1(&mylast, handle->clnt);
         if (incr_ret == (kdb_incr_result_t *)NULL) {
             clnt_perror(handle->clnt,
@@ -796,6 +807,8 @@ reinit:
                 kadm5_destroy((void *)server_handle);
             server_handle = (void *)NULL;
             handle = (kadm5_iprop_handle_t)NULL;
+            if (debug)
+                fprintf(stderr, "Reinitializing iprop because get updates failed\n");
             goto reinit;
         }
 
@@ -803,6 +816,9 @@ reinit:
 
         case UPDATE_FULL_RESYNC_NEEDED:
             /* XXX Factor into subroutine */
+            if (debug)
+                fprintf(stderr, _("Full resync needed\n"));
+            syslog(LOG_INFO, "kpropd: Full resync needed.");
             /*
              * We dont do bother with a full resync again if the last
              * time the incr_ret->lastentry was the same as now.
@@ -831,6 +847,9 @@ reinit:
                  * XXX This case is perfect for factoring into a
                  * subroutine.
                  */
+                if (debug)
+                    fprintf(stderr, _("Full resync request granted\n"));
+                syslog(LOG_INFO, "kpropd: Full resync request granted.");
                 backoff_cnt = 0;
                 /*
                  * Now we wait for notice of successful prop from the
@@ -839,7 +858,6 @@ reinit:
                 fullprop_timer = INITIAL_FULL_TIMER;
                 do {
                     int eof = 0;
-                    int rvret;
 
                     /*
                      * Use alarm() for timeouts -- cheap, but it works.
@@ -853,8 +871,14 @@ reinit:
                      */
                     signal(SIGALRM, alarm_handler);
                     alarm(fullprop_timer);
+                    if (debug)
+                        fprintf(stderr, _("Waiting for report of full resync from child process\n"));
+                    syslog(LOG_WARNING, "kpropd: Waiting for report of full resync from child process.");
                     rvret = read_report(rfd, &report, &eof);
                     alarm(0);
+                    if (debug)
+                        fprintf(stderr, _("Result: %d (%d), eof = %d\n"), rvret, rvret == -1 ? errno : 0, eof);
+                    syslog(LOG_WARNING, "kpropd: Waiting for report of full resync from child process.");
                     if (rvret == -1)
                         return errno;
                     if (eof)
@@ -862,35 +886,48 @@ reinit:
                     if (rvret == 0)
                         fullprop_timer = (fullprop_timer * 15) / 10;
 
-                } while (report.finish_time < start_time &&
+                } while (rvret != 0 && report.finish_time < start_time &&
                      fullprop_timer < MAX_FULL_TIMER);
 
-                if (!WIFEXITED(report.status) ||
+                if (rvret == 0 || !WIFEXITED(report.status) ||
                     WEXITSTATUS(report.status) != 0) {
-                    if (debug)
-                        fprintf(stderr, _("Full resync failed\n"));
-                    syslog(LOG_WARNING, "kpropd: Full resync failed.");
+                    if (rvret) {
+                        if (debug)
+                            fprintf(stderr, _("Full resync failed\n"));
+                        syslog(LOG_WARNING, "kpropd: Full resync failed.");
+                    } else {
+                        if (debug)
+                            fprintf(stderr, _("Full resync timedout\n"));
+                        syslog(LOG_WARNING, "kpropd: Full resync timedout.");
+                    }
                     frdone = 0;
                     backoff_cnt++;
-                } else
+                } else {
                     if (debug)
                         fprintf(stderr, _("Full resync succeeded\n"));
                     frdone = 1;
+                }
                 break;
 
             case UPDATE_BUSY:
                 /*
                  * Exponential backoff
                  */
+                if (debug)
+                    fprintf(stderr, "Exponential backoff\n");
                 backoff_cnt++;
                 break;
 
             case UPDATE_PERM_DENIED:
+                if (debug)
+                    fprintf(stderr, "Full resync permission denied\n");
                 syslog(LOG_ERR, _("kpropd: Full resync,"
                                   " permission denied."));
                 goto error;
 
             case UPDATE_ERROR:
+                if (debug)
+                    fprintf(stderr, "Full resync error from master\n");
                 syslog(LOG_ERR, _("kpropd: Full resync,"
                                   " error returned from master KDC."));
                 goto error;
@@ -898,6 +935,9 @@ reinit:
             default:
                 backoff_cnt = 0;
                 frdone = 0;
+
+                if (debug)
+                    fprintf(stderr, "Full resync invalid result from master\n");
                 syslog(LOG_ERR, _("kpropd: Full resync,"
                                   " invalid return from master KDC."));
                 break;
@@ -913,12 +953,16 @@ reinit:
              * entries using the kdb conv api and will commit
              * the entries to the slave kdc database
              */
+            if (debug)
+                fprintf(stderr, "Got incremental updates from the master\n");
             retval = ulog_replay(kpropd_context, incr_ret,
                                  db_args);
 
             if (retval) {
                 const char *msg =
                     krb5_get_error_message(kpropd_context, retval);
+                if (debug)
+                    fprintf(stderr, "ulog_replay failed (%s), updates not registered\n", msg);
                 syslog(LOG_ERR,
                        _("kpropd: ulog_replay failed (%s), updates not registered."), msg);
                 krb5_free_error_message(kpropd_context, msg);
@@ -931,11 +975,15 @@ reinit:
             break;
 
         case UPDATE_PERM_DENIED:
+            if (debug)
+                fprintf(stderr, "get_updates permission denied\n");
             syslog(LOG_ERR, _("kpropd: get_updates,"
                               " permission denied."));
             goto error;
 
         case UPDATE_ERROR:
+            if (debug)
+                fprintf(stderr, "get_updates error from master\n");
             syslog(LOG_ERR, _("kpropd: get_updates, error "
                               "returned from master KDC."));
             goto error;
@@ -944,6 +992,8 @@ reinit:
             /*
              * Exponential backoff
              */
+            if (debug)
+                fprintf(stderr, "get_updates master busy; backoff\n");
             backoff_cnt++;
             break;
 
@@ -960,6 +1010,8 @@ reinit:
 
         default:
             backoff_cnt = 0;
+            if (debug)
+                fprintf(stderr, "get_updates invalid result from master\n");
             syslog(LOG_ERR, _("kpropd: get_updates,"
                               " invalid return from master KDC."));
             break;
@@ -981,8 +1033,11 @@ reinit:
                         backoff_time);
             (void) sleep(backoff_time);
         }
-        else
+        else {
+            if (debug)
+                fprintf(stderr, "Waiting for %d seconds before checking for updates again\n", pollin);
             (void) sleep(pollin);
+        }
 
     }
 
@@ -1131,6 +1186,9 @@ void PRS(argv)
                         usage();
                     word = 0;
                     break;
+                case 'D':
+                    debugdaemon++;
+                    /*FALLTHROUGH*/
                 case 'd':
                     debug++;
                     break;

@@ -16,7 +16,8 @@ iprop_kdc_conf = {
                 'iprop_logfile' : '$testdir/db.ulog'
                 }}},
     'slave' : { 'realms' : { '$realm' : {
-                'iprop_logfile' : '$testdir/slave-db.ulog'
+                'iprop_logfile' : '$testdir/slave-db.ulog',
+                'iprop_poll' : '5'
                 }}}
 }
 
@@ -61,10 +62,12 @@ acl.close()
 
 # XXX need to start this as a daemon; need k5test support, sentinel
 incoming = os.path.join(realm.testdir, 'incoming-slave-datatrans')
-realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-P', kprop_port, '-f', incoming,
-                    '-p', kdb5_util, '-a', acl_file, '>' + os.path.join(realm.testdir, 'kpropd-slave.log'), '2>&1', '&' ])])
+#realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-P', kprop_port, '-f', incoming,
+#                    '-p', kdb5_util, '-a', acl_file, '>' + os.path.join(realm.testdir, 'kpropd-slave.log'), '2>&1', '&' ])])
+realm.start_kpropd()
+realm.run_as_slave(['/bin/sleep', '25'])
 realm.run_kadminl('modprinc -allow_tix w')
-realm.run_as_slave(['/bin/sleep', '60'])
+realm.run_as_slave(['/bin/sleep', '15'])
 output = realm.run_as_slave([kproplog])
 
 success('iprop tests.')

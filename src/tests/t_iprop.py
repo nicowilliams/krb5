@@ -8,7 +8,8 @@ os.environ['KPROP_PORT'] = kprop_port
 from k5test import *
 
 iprop_kdc_conf = {
-    'all' : { 'realms' : { '$realm' : {
+    'all' : { 'libdefaults' : { 'default_realm' : 'KRBTEST.COM'},
+              'realms' : { '$realm' : {
                 'iprop_enable' : 'true',
                 'iprop_port' : '$port4'
                 }}},
@@ -39,7 +40,7 @@ realm.run_as_slave([kdb5_util, 'load', dumpfile])
 realm.run_as_slave([kdb5_util, 'stash', '-P', 'master'])
 #realm.start_kadmind()
 realm.run_as_master(['/bin/bash', '-c', ' '.join([kadmind, '-nofork',
-                    '>' + os.path.join(realm.testdir, 'kadmind5.log'), '2>&1', '&' ])])
+                    '>>' + os.path.join(realm.testdir, 'kadmind5.log'), '2>&1', '&' ])])
 realm.run_as_slave(['/bin/sleep', '2'])
 
 # Make some changes to the master db.
@@ -68,9 +69,8 @@ incoming = os.path.join(realm.testdir, 'incoming-slave-datatrans')
 realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-D', '-P', kprop_port, '-f', incoming,
                     '-p', kdb5_util, '-a', acl_file, '>' + os.path.join(realm.testdir, 'kpropd-slave.log'), '2>&1', '&' ])])
 #realm.start_kpropd()
-realm.run_as_slave(['/bin/sleep', '15'])
 realm.run_kadminl('modprinc -allow_tix w')
-realm.run_as_slave(['/bin/sleep', '55'])
+realm.run_as_slave(['/bin/sleep', '1005'])
 output = realm.run_as_slave([kproplog])
 
 success('iprop tests.')

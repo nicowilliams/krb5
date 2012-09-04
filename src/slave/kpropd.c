@@ -102,7 +102,7 @@ extern int daemon(int, int);
 
 #define SYSLOG_CLASS LOG_DAEMON
 #define INITIAL_TIMER 10
-#define INITIAL_FULL_TIMER 60
+#define INITIAL_FULL_TIMER 7
 #define MAX_FULL_TIMER 300
 
 char *def_realm = NULL;
@@ -131,9 +131,11 @@ static char *kprop_version = KPROP_PROT_VERSION;
 
 char    *progname;
 int     debug = 0;
-int     debugdaemon = 0;
+int     nodaemon = 0;
 char    *srvtab = 0;
 int     standalone = 0;
+
+pid_t fullprop_child = (pid_t)-1;
 
 krb5_principal  server;         /* This is our server principal name */
 krb5_principal  client;         /* This is who we're talking to */
@@ -191,6 +193,28 @@ void
 alarm_handler(int sig)
 {
     /* Nothing to do, just catch the signal */
+    if (debug)
+        fprintf(stderr, "Got SIGALRM!\n");
+}
+
+static
+void
+kill_do_standalone(int sig)
+{
+    if (fullprop_child > 0) {
+        if (debug)
+            fprintf(stderr, "Killing fullprop child (%d)\n",
+                    (int)fullprop_child);
+        kill(fullprop_child, sig);
+    }
+}
+
+static
+void
+atexit_kill_do_standalone(void)
+{
+    if (fullprop_child > 0)
+        kill(fullprop_child, SIGHUP);
 }
 
 int
@@ -202,7 +226,6 @@ main(argc, argv)
     kdb_log_context *log_ctx;
     int pipefds[2];
     struct stat st;
-    pid_t fullprop_child;
 
     setlocale(LC_ALL, "");
     PRS(argv);
@@ -223,6 +246,10 @@ main(argc, argv)
 
     {
 #ifdef POSIX_SIGNALS
+        /*
+         * We really want SIGALRM handling to *not* restart read(2) on
+         * the rfd!
+         */
         struct sigaction s_action;
         memset(&s_action, 0, sizeof(s_action));
         sigemptyset(&s_action.sa_mask);
@@ -233,7 +260,7 @@ main(argc, argv)
 #endif
     }
 
-    if (!debug || debugdaemon)
+    if (!debug && !nodaemon)
         daemon(0, 0);
 
     if (!standalone) {
@@ -273,7 +300,11 @@ main(argc, argv)
     set_cloexec_fd(pipefds[0]);
     set_cloexec_fd(pipefds[1]);
 
-    signal(SIGHUP, SIG_DFL);
+    signal(SIGHUP, kill_do_standalone);
+    signal(SIGINT, kill_do_standalone);
+    signal(SIGQUIT, kill_do_standalone);
+    signal(SIGSEGV, kill_do_standalone);
+    atexit(atexit_kill_do_standalone);
     fullprop_child = fork();
     switch (fullprop_child) {
     case -1:
@@ -399,21 +430,24 @@ do_standalone(int wfd)
             if (wait_pid == -1) {
                 /* Something bad happened; panic. */
                 if (debug)
-                    fprintf(stderr, _("waitpid() failed to wait for doit() (%d %s)"), errno, strerror(errno));
+                    fprintf(stderr, _("waitpid() failed to wait for doit() (%d %s)\n"), errno, strerror(errno));
                 com_err(progname, errno,
                         _("while waiting to receive database"));
                 exit(1);
             }
             if (debug)
-                fprintf(stderr, _("doit() exited, maybe it succeeded?"));
+                fprintf(stderr, _("doit() exited, maybe it succeeded?\n"));
 
             close(s);
             /* Inform do_iprop() */
             if (wfd >= 0) {
+                ssize_t bytes;
                 if (debug)
-                    fprintf(stderr, _("doit() exited; informing iprop parent process"));
+                    fprintf(stderr, _("doit() exited; informing iprop parent process\n"));
                 report.finish_time = time(NULL);
-                write(wfd, &report, sizeof(report));
+                bytes = write(wfd, &report, sizeof(report));
+                if (bytes == -1 && errno == EPIPE)
+                    exit(0);
             }
 
             if (runonce)
@@ -596,7 +630,12 @@ read_report(int fd, struct fullprop_report *report, int *eof)
 
     *eof = 0;
     memset(report, 0, sizeof(*report));
+    errno = 0;
     bytes = read(fd, report, sizeof(*report));
+    save_errno = errno;
+    if (debug)
+        fprintf(stderr, "read_report() == %d (%d %s)\n", bytes, errno, strerror(errno));
+    errno = save_errno;
     if (bytes == -1 && errno != EINTR) {
         save_errno = errno;
         syslog(LOG_ERR, "I/O error while reading status of full resync\n");
@@ -645,6 +684,9 @@ do_iprop(kdb_log_context *log_ctx, int rfd)
 
     kadm5_iprop_handle_t handle;
     kdb_hlog_t *ulog;
+
+    if (debug)
+        fprintf(stderr, "Incremental propagation enabled\n");
 
     memset(&master_last_full, 0, sizeof(master_last_full));
     ulog = log_ctx->ulog;
@@ -747,6 +789,8 @@ reinit:
                         "while attempting to connect"
                         " to master KDC ... retrying"));
             backoff_time = backoff_from_master(&reinit_cnt);
+            if (debug)
+                fprintf(stderr, "Sleeping %d seconds to re-initialize kadm5 (RPC ERROR)\n", backoff_time);
             (void) sleep(backoff_time);
             goto reinit;
         } else {
@@ -763,6 +807,8 @@ reinit:
                     _("while initializing %s interface, retrying"),
                     progname);
             backoff_time = backoff_from_master(&reinit_cnt);
+            if (debug)
+                fprintf(stderr, "Sleeping %d seconds to re-initialize kadm5 (krb5kdc not running?)\n", backoff_time);
             sleep(backoff_time);
             goto reinit;
         }
@@ -869,7 +915,20 @@ reinit:
                      * Because we may have timed out earlier we may read
                      * multiple reports that are of no interest.
                      */
-                    signal(SIGALRM, alarm_handler);
+                    if (debug)
+                        fprintf(stderr, "Setting alarm (%d)\n", fullprop_timer);
+
+                    {
+#ifdef POSIX_SIGNALS
+                        struct sigaction s_action;
+                        memset(&s_action, 0, sizeof(s_action));
+                        sigemptyset(&s_action.sa_mask);
+                        s_action.sa_handler = alarm_handler;
+                        sigaction(SIGALRM, &s_action, NULL);
+#else
+                        signal(SIGALRM, alarm_handler);
+#endif
+                    }
                     alarm(fullprop_timer);
                     if (debug)
                         fprintf(stderr, _("Waiting for report of full resync from child process\n"));
@@ -1187,8 +1246,9 @@ void PRS(argv)
                     word = 0;
                     break;
                 case 'D':
-                    debugdaemon++;
-                    /*FALLTHROUGH*/
+                    nodaemon++;
+                    debug++;
+                    break;
                 case 'd':
                     debug++;
                     break;
@@ -1720,13 +1780,17 @@ load_database(context, kdb_util, database_file_name)
         exit(1);
     case 0:
         if (!debug) {
+            int devnull;
+
+            devnull = open("/dev/null", O_RDWR);
+            if (devnull == -1) {
+                perror("opening /dev/null");
+                exit(1);
+            }
             save_stderr = dup(2);
-            close(0);
-            close(1);
-            close(2);
-            open("/dev/null", O_RDWR);
-            dup(0);
-            dup(0);
+            dup2(devnull, 0);
+            dup2(devnull, 1);
+            dup2(devnull, 2);
         }
 
         if (execv(kdb_util, edit_av) < 0)

@@ -57,7 +57,7 @@ static char *reply_unknown_str	= "<UNKNOWN_CODE>";
 #ifdef	DPRINT
 #undef	DPRINT
 #endif
-#define	DPRINT(i) if (nofork) printf i
+#define	DPRINT(i)  if (nofork) fprintf i
 
 
 static void
@@ -138,7 +138,7 @@ iprop_get_updates_1_svc(kdb_last_t *arg, struct svc_req *rqstp)
     /* default return code */
     ret.ret = UPDATE_ERROR;
 
-    DPRINT(("%s: start, last_sno=%lu\n", whoami,
+    DPRINT((stderr, "%s: start, last_sno=%lu\n", whoami,
 	    (unsigned long) arg->last_sno));
 
     if (!handle) {
@@ -169,7 +169,7 @@ iprop_get_updates_1_svc(kdb_last_t *arg, struct svc_req *rqstp)
 	}
     }
 
-    DPRINT(("%s: clprinc=`%s'\n\tsvcprinc=`%s'\n",
+    DPRINT((stderr, "%s: clprinc=`%s'\n\tsvcprinc=`%s'\n",
 	    whoami, client_name, service_name));
 
     if (!kadm5int_acl_check(handle->context,
@@ -179,7 +179,7 @@ iprop_get_updates_1_svc(kdb_last_t *arg, struct svc_req *rqstp)
 			    NULL)) {
 	ret.ret = UPDATE_PERM_DENIED;
 
-        DPRINT(("%s: PERMISSION DENIED: clprinc=`%s'\n\tsvcprinc=`%s'\n",
+        DPRINT((stderr, "%s: PERMISSION DENIED: clprinc=`%s'\n\tsvcprinc=`%s'\n",
                 whoami, client_name, service_name));
 
 	krb5_klog_syslog(LOG_NOTICE, LOG_UNAUTH, whoami,
@@ -203,7 +203,7 @@ iprop_get_updates_1_svc(kdb_last_t *arg, struct svc_req *rqstp)
 			(unsigned long)arg->last_sno);
     }
 
-    DPRINT(("%s: request %s %s\n\tclprinc=`%s'\n\tsvcprinc=`%s'\n",
+    DPRINT((stderr, "%s: request %s %s\n\tclprinc=`%s'\n\tsvcprinc=`%s'\n",
             whoami, obuf,
             ((kret == 0) ? "success" : error_message(kret)),
             client_name, service_name));
@@ -280,13 +280,13 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	goto out;
     }
 
-    DPRINT(("%s: start\n", whoami));
+    DPRINT((stderr, "%s: start\n", whoami));
 
     {
 	gss_buffer_desc client_desc, service_desc;
 
 	if (setup_gss_names(rqstp, &client_desc, &service_desc) < 0) {
-            DPRINT(("%s: setup_gss_names failed\n", whoami));
+            DPRINT((stderr, "%s: setup_gss_names failed\n", whoami));
 	    krb5_klog_syslog(LOG_ERR,
 			     _("%s: setup_gss_names failed"),
 			     whoami);
@@ -297,7 +297,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	if (client_name == NULL || service_name == NULL) {
 	    free(client_name);
 	    free(service_name);
-            DPRINT(("%s: out of memory\n", whoami));
+            DPRINT((stderr, "%s: out of memory\n", whoami));
 	    krb5_klog_syslog(LOG_ERR,
 			     _("%s: out of memory recording principal names"),
 			     whoami);
@@ -305,7 +305,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	}
     }
 
-    DPRINT(("%s: clprinc=`%s'\n\tsvcprinc=`%s'\n",
+    DPRINT((stderr, "%s: clprinc=`%s'\n\tsvcprinc=`%s'\n",
 	    whoami, client_name, service_name));
 
     if (!kadm5int_acl_check(handle->context,
@@ -315,7 +315,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 			    NULL)) {
 	ret.ret = UPDATE_PERM_DENIED;
 
-        DPRINT(("%s: Permission denied\n", whoami));
+        DPRINT((stderr, "%s: Permission denied\n", whoami));
 	krb5_klog_syslog(LOG_NOTICE, LOG_UNAUTH, whoami,
 			 client_name, service_name,
 			 client_addr(rqstp));
@@ -356,14 +356,14 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
      * acts like a callback to the slave).
      */
     fret = fork();
-    DPRINT(("%s: fork=%d (%d)\n", whoami, fret, getpid()));
+    DPRINT((stderr, "%s: fork=%d (%d)\n", whoami, fret, getpid()));
 
     switch (fret) {
     case -1: /* error */
 	if (nofork) {
 	    perror(whoami);
 	}
-        DPRINT(("%s: fork failed\n", whoami));
+        DPRINT((stderr, "%s: fork failed\n", whoami));
 	krb5_klog_syslog(LOG_ERR,
 			 _("%s: fork failed: %s"),
 			 whoami,
@@ -371,12 +371,17 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	goto out;
 
     case 0: /* child */
-	DPRINT(("%s: run `%s' ...\n", whoami, ubuf));
+	DPRINT((stderr, "%s: run `%s' ...\n", whoami, ubuf));
 	(void) signal(SIGCHLD, SIG_DFL);
 	/* run kdb5_util(1M) dump for IProp */
 	/* XXX popen can return NULL; is pclose(NULL) okay?  */
+
+        printf("Hello!\n");
+        DPRINT((stderr, "Hello!\n"));
+        printf("Running %s\n", ubuf);
+        krb5_klog_syslog(LOG_DEBUG, "%s: Running %s (%d)\n", ubuf, (int) getpid());
 	pret = pclose(popen(ubuf, "w"));
-	DPRINT(("%s: pclose=%d\n", whoami, pret));
+	DPRINT((stderr, "%s: pclose=%d\n", whoami, pret));
 	if (pret != 0) {
 	    /* XXX popen/pclose may not set errno
 	       properly, and the error could be from the
@@ -391,7 +396,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	    _exit(1);
 	}
 
-	DPRINT(("%s: exec `kprop -f %s %s' ...\n",
+	DPRINT((stderr, "%s: exec `kprop -f %s %s' ...\n",
 		whoami, KPROP_DEFAULT_FILE, clhost));
 	/* XXX Yuck!  */
 	if (getenv("KPROP_PORT"))
@@ -419,7 +424,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	ret.lastentry.last_time.seconds = 0;
 	ret.lastentry.last_time.useconds = 0;
 
-        DPRINT(("%s: spawned resync process %d, client=%s, service=%s, addr=%s\n",
+        DPRINT((stderr, "%s: spawned resync process %d, client=%s, service=%s, addr=%s\n",
                 whoami, fret, client_name, service_name, client_addr(rqstp)));
 	krb5_klog_syslog(LOG_NOTICE,
 			 _("Request: %s, spawned resync process %d, client=%s, service=%s, addr=%s"),

@@ -57,7 +57,12 @@ static char *reply_unknown_str	= "<UNKNOWN_CODE>";
 #ifdef	DPRINT
 #undef	DPRINT
 #endif
-#define	DPRINT(i)  if (nofork) fprintf i
+#define	DPRINT(i)   do {                    \
+                        if (nofork) {       \
+                            fprintf i;      \
+                            fflush(stderr); \
+                        }                   \
+                    } while (0)
 
 
 static void
@@ -257,6 +262,7 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
     char *ubuf = 0;
     char clhost[MAXHOSTNAMELEN] = {0};
     int pret, fret;
+    FILE *p;
     kadm5_server_handle_t handle = global_server_handle;
     OM_uint32 min_stat;
     gss_name_t name = NULL;
@@ -342,7 +348,8 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
      * slaves.
      */
     /* XXX Make dump file path configurable!! */
-    if (asprintf(&ubuf, "%s dump -i%d -c %s </dev/null 2>&1",
+    /* XXX Make kdb5_util path path configurable!! */
+    if (asprintf(&ubuf, "%s dump -i%d -c %s",
 		 KPROPD_DEFAULT_KDB5_UTIL, vers, KPROP_DEFAULT_FILE) < 0) {
 	krb5_klog_syslog(LOG_ERR,
 			 _("%s: cannot construct kdb5 util dump string too long; out of memory"),
@@ -374,13 +381,17 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
 	DPRINT((stderr, "%s: run `%s' ...\n", whoami, ubuf));
 	(void) signal(SIGCHLD, SIG_DFL);
 	/* run kdb5_util(1M) dump for IProp */
-	/* XXX popen can return NULL; is pclose(NULL) okay?  */
-
-        printf("Hello!\n");
-        DPRINT((stderr, "Hello!\n"));
-        printf("Running %s\n", ubuf);
-        krb5_klog_syslog(LOG_DEBUG, "%s: Running %s (%d)\n", ubuf, (int) getpid());
-	pret = pclose(popen(ubuf, "w"));
+        DPRINT((stderr, "Running %s\n", ubuf));
+        p = popen(ubuf, "w");
+        if (p == NULL) {
+	    krb5_klog_syslog(LOG_ERR,
+			     _("%s: popen failed: %s"),
+			     whoami, error_message(errno));
+	    _exit(1);
+        }
+	pret = pclose(p);
+        fprintf(stderr, "pret = %d\n", pret);
+        fflush(stderr);
 	DPRINT((stderr, "%s: pclose=%d\n", whoami, pret));
 	if (pret != 0) {
 	    /* XXX popen/pclose may not set errno

@@ -895,7 +895,11 @@ class K5Realm(object):
     def start_kadmind(self):
         global krb5kdc
         assert(self._kadmind_proc is None)
-        self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W'],
+        self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W',
+                                            '-p', kdb5_util,
+                                            '-F',
+                                            os.join(self.testdir,
+                                                    'master-dump')],
                                             self.env_master, 'starting...')
 
     def stop_kadmind(self):

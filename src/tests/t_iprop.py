@@ -40,7 +40,8 @@ realm.run_as_slave([kdb5_util, 'load', dumpfile])
 realm.run_as_slave([kdb5_util, 'stash', '-P', 'master'])
 #realm.start_kadmind()
 realm.run_as_master(['/bin/bash', '-c', ' '.join([kadmind, '-nofork',
-                    '>>' + os.path.join(realm.testdir, 'kadmind5.log'), '2>&1', '&' ])])
+                     '-p', kdb5_util, '-F', os.path.join(realm.testdir, 'master-dump'),
+                     '>>' + os.path.join(realm.testdir, 'kadmind5.log'), '2>&1', '&' ])])
 realm.run_as_slave(['/bin/sleep', '2'])
 
 # Make some changes to the master db.

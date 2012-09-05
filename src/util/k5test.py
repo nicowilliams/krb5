@@ -868,7 +868,12 @@ class K5Realm(object):
     def start_kadmind(self):
         global krb5kdc
         assert(self._kadmind_proc is None)
-        self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W'],
+        self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W',
+                                            '-p', kdb5_util,
+                                            '-C', kprop,
+                                            '-F',
+                                            os.join(self.testdir,
+                                                    'master-dump')],
                                             self.env_master, 'starting...')
 
     def stop_kadmind(self):
@@ -879,10 +884,15 @@ class K5Realm(object):
     def start_kpropd(self):
         global krb5kdc
         assert(self._kpropd_proc is None)
-        self._kpropd_proc = _start_daemon([kpropd, '-d', '-D', '-P', os.environ['KPROP_PORT'],
-                                           '-f', os.path.join(self.testdir, 'incoming-slave-datatrans'),
-                                           '-p', kdb5_util, '-a', os.path.join(self.testdir, 'kpropd-acl')],
-                                            self.env_slave, 'waiting for a kprop connection')
+        self._kpropd_proc = _start_daemon([kpropd, '-d', '-D', '-P',
+                                           os.environ['KPROP_PORT'],
+                                           '-f', os.path.join(self.testdir,
+                                               'incoming-slave-datatrans'),
+                                           '-p', kdb5_util, '-a',
+                                           os.path.join(self.testdir,
+                                               'kpropd-acl')],
+                                           self.env_slave,
+                                           'waiting for a kprop connection')
 
     def stop_kpropd(self):
         assert(self._kpropd_proc is not None)

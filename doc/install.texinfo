@@ -992,6 +992,15 @@ This specifies the port number to be used for incremental
 propagation.  This is required in both master and slave configuration
 files.
 
+@item @code{iprop_dump_tmout} (integer)
+This timeout is applied by kpropd to the start of a full resync, and
+mostly relates to the time it takes to dump a KDB on the master KDC.
+Default: 300 seconds (5 minutes).
+
+@item @code{iprop_full_progress_tmout} (integer)
+This timeout is applied by kpropd to incremental progress for full
+resyncs.  Default: 10 seconds.
+
 @item @code{iprop_logfile} (file name)
 This specifies where the update log file for the realm database is to
 be stored.  The default is to use the @code{database_name} entry from

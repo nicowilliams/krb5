@@ -35,6 +35,8 @@ extern gss_name_t rqst2name(struct svc_req *rqstp);
 extern void *global_server_handle;
 extern int nofork;
 extern short l_port;
+extern char *kdb5_util;
+extern char *dump_file;
 static char abuf[33];
 
 /* Result is stored in a static buffer and is invalidated by the next call. */
@@ -345,12 +347,12 @@ ipropx_resync(uint32_t vers, struct svc_req *rqstp)
      * dump already exists or that dump is not in ipropx format, or the
      * sno and timestamp in the header of that dump are outside the
      * ulog.  This allows us to share a single global dump with all
-     * slaves.
+     * slaves, since it's OK to share an older dump, as long as its sno
+     * and timestamp are in the ulog (then the slaves can get the
+     * subsequent updates very iprop).
      */
-    /* XXX Make dump file path configurable!! */
-    /* XXX Make kdb5_util path path configurable!! */
     if (asprintf(&ubuf, "%s dump -i%d -c %s",
-		 KPROPD_DEFAULT_KDB5_UTIL, vers, KPROP_DEFAULT_FILE) < 0) {
+		 kdb5_util, vers, dump_file) < 0) {
 	krb5_klog_syslog(LOG_ERR,
 			 _("%s: cannot construct kdb5 util dump string too long; out of memory"),
 			 whoami);

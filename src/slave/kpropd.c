@@ -1576,7 +1576,7 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
     report.prop_time = time(NULL);
     if (wfd != -1) {
         if (debug)
-            fprintf(stderr, "Full propagation trasnfer started.\n");
+            fprintf(stderr, "Full propagation transfer started.\n");
         if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
             com_err(progname, retval, "while reporting progress");
             send_error(context, fd, retval, "while reporting progress");
@@ -1628,6 +1628,8 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
         received_size += outbuf.length;
         /* Report xfer progress to do_iprop() parent process */
         if (wfd != -1) {
+            if (debug > 1)
+                fprintf(stderr, "Full propagation transfer progress.\n");
             if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
                 com_err(progname, retval, "while reporting progress");
                 send_error(context, fd, retval, "while reporting progress");
@@ -1649,7 +1651,7 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
     if (wfd != -1) {
         report.prop_complete = 1;
         if (debug)
-            fprintf(stderr, "Full propagation trasnfer finished.\n");
+            fprintf(stderr, "Full propagation transfer finished.\n");
         if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
             com_err(progname, retval, "while reporting progress");
             send_error(context, fd, retval, "while reporting progress");

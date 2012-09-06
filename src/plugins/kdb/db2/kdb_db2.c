@@ -433,12 +433,12 @@ ctx_lock(krb5_context context, krb5_db2_context *dbc, int lockmode)
                 return KRB5_KDB_CANTLOCK_DB;
             sleep(1);
         }
-        if (retval == EACCES)
+        if (retval) {
+            krb5_set_error_message(context, KRB5_KDB_CANTLOCK_DB,
+                                   _("Can't lock the DB: %s"),
+                                   krb5_get_error_message(context, retval));
             return KRB5_KDB_CANTLOCK_DB;
-        else if (retval == EAGAIN || retval == EWOULDBLOCK)
-            return OSA_ADB_CANTLOCK_DB;
-        else if (retval)
-            return retval;
+        }
 
         /* Open the DB (or re-open it for read/write). */
         if (dbc->db != NULL)

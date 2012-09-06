@@ -8,6 +8,7 @@ SYNOPSIS
 ------------
 
 **kproplog** [**-h**] [**-e** *num*] [-v]
+**kproplog** [-R]
 
 DESCRIPTION
 ------------
@@ -26,32 +27,51 @@ If invoked on the master, all of the update entries are also displayed.
 When invoked on a slave KDC server, only a summary of the updates are displayed, which includes the serial number of the last update received and the associated time stamp of the last update.
 
 OPTIONS
-------------
+-------
 
-       **-h**
-             Display a summary of the update log. This information includes the database version number, state of the database, 
-             the number of updates in the log, the time stamp of the first and last update, and the version number of the first and last update entry.
+**-R**
+    Reset the update log.  This forces full resynchronization.  If used
+    on a slave then that slave will request a full resync.  If used on
+    the master then all slaves will request full resyncs.
 
-       **-e** *num*
-             Display the last *num* update entries in the log.  This is useful when debugging synchronization between KDC servers.
+**-h**
+    Display a summary of the update log.  This information includes
+    the database version number, state of the database, the number of
+    updates in the log, the time stamp of the first and last update,
+    and the version number of the first and last update entry.
 
-       **-v**
-             Display individual attributes per update.  An example of the output generated for one entry::
+**-e** *num*
+    Display the last *num* update entries in the log.  This is useful
+    when debugging synchronization between KDC servers.
 
-               Update Entry
-                  Update serial # : 4
-                  Update operation : Add
-                  Update principal : test@EXAMPLE.COM
-                  Update size : 424
-                  Update committed : True
-                  Update time stamp : Fri Feb 20 23:37:42 2004
-                  Attributes changed : 6
-                        Principal
-                        Key data
-                        Password last changed
-                        Modifying principal
-                        Modification time
-                        TL data
+**-v**
+    Display individual attributes per update.  An example of the
+    output generated for one entry:
+
+     ::
+
+        Update Entry
+           Update serial # : 4
+           Update operation : Add
+           Update principal : test@EXAMPLE.COM
+           Update size : 424
+           Update committed : True
+           Update time stamp : Fri Feb 20 23:37:42 2004
+           Attributes changed : 6
+                 Principal
+                 Key data
+                 Password last changed
+                 Modifying principal
+                 Modification time
+                 TL data
+
+
+ENVIRONMENT
+-----------
+
+kproplog uses the following environment variables:
+
+* **KRB5_KDC_PROFILE**
 
 SEE ALSO
 ------------

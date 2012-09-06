@@ -29,8 +29,9 @@ static char     *progname;
 static void
 usage()
 {
-    (void) fprintf(stderr, _("\nUsage: %s [-h] [-v] [-v] [-e num]\n\n"),
-                   progname);
+    (void) fprintf(stderr, _("\nUsage: %s [-h] [-v] [-v] [-e num]\n"
+                             "\t%s -R\n\n"),
+                   progname, progname);
     exit(1);
 }
 
@@ -488,6 +489,7 @@ main(int argc, char **argv)
     int                 c;
     unsigned int        verbose = 0;
     bool_t              headeronly = FALSE;
+    bool_t              reset = FALSE;
     uint32_t            entry = 0;
     krb5_context        context;
     kadm5_config_params params;
@@ -505,13 +507,16 @@ main(int argc, char **argv)
 
     progname = argv[0];
 
-    while ((c = getopt(argc, argv, "vhe:")) != -1) {
+    while ((c = getopt(argc, argv, "Rvhe:")) != -1) {
         switch (c) {
         case 'h':
             headeronly = TRUE;
             break;
         case 'e':
             entry = atoi(optarg);
+            break;
+        case 'R':
+            reset = TRUE;
             break;
         case 'v':
             verbose++;
@@ -557,6 +562,16 @@ main(int argc, char **argv)
         (void) fprintf(stderr,
                        _("Corrupt header log, exiting\n\n"));
         exit(1);
+    }
+
+    if (reset) {
+        ulog->kdb_hmagic = KDB_ULOG_HDR_MAGIC;
+        ulog->db_version_num = KDB_VERSION;
+        ulog->kdb_state = KDB_STABLE;
+        ulog->kdb_block = ULOG_BLOCK;
+        ulog_sync_header(ulog);
+        printf(_("Reinitialized the ulog.\n"));
+        exit(0);
     }
 
     (void) printf(_("Update log dump :\n"));

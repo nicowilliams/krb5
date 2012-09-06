@@ -45,6 +45,10 @@ Incremental propagation is not enabled by default; it can be enabled using the *
 The principal "kiprop/slavehostname\@REALM" (where "slavehostname" is the name of the slave KDC host, 
 and "REALM" is the name of the Kerberos realm) must be present in the slave's keytab file.
 
+:ref:`kproplog(8)` can be used to force full replication when iprop is
+enabled.
+
+
 OPTIONS
 --------
 

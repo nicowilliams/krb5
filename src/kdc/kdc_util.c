@@ -443,6 +443,8 @@ kdc_get_server_key(krb5_ticket *ticket, unsigned int flags,
 
     retval = krb5_db_get_principal(kdc_context, ticket->server, flags,
                                    &server);
+    if (retval == KRB5_KDB_CANTLOCK_DB)
+        retval = KRB5KDC_ERR_SVC_UNAVAILABLE;
     if (retval == KRB5_KDB_NOENTRY) {
         char *sname;
         if (!krb5_unparse_name(kdc_context, ticket->server, &sname)) {
@@ -2116,7 +2118,10 @@ kdc_process_s4u2self_req(krb5_context context,
 
         code = krb5_db_get_principal(context, (*s4u_x509_user)->user_id.user,
                                      KRB5_KDB_FLAG_INCLUDE_PAC, &princ);
-        if (code == KRB5_KDB_NOENTRY) {
+        if (code == KRB5_KDB_CANTLOCK_DB) {
+            *status = krb5_get_error_message(context, code);
+            return KRB5KDC_ERR_SVC_UNAVAILABLE;
+        } else if (code == KRB5_KDB_NOENTRY) {
             *status = "UNKNOWN_S4U2SELF_PRINCIPAL";
             return KRB5KDC_ERR_C_PRINCIPAL_UNKNOWN;
         } else if (code) {

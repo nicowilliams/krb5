@@ -911,7 +911,7 @@ class K5Realm(object):
     def start_kpropd(self):
         global krb5kdc
         assert(self._kpropd_proc is None)
-        self._kpropd_proc = _start_daemon([kpropd, '-d', '-D', '-P',
+        self._kpropd_proc = _start_daemon([kpropd, '-D', '-P',
                                            os.environ['KPROP_PORT'],
                                            '-f', os.path.join(self.testdir,
                                                'incoming-slave-datatrans'),
@@ -919,7 +919,7 @@ class K5Realm(object):
                                            os.path.join(self.testdir,
                                                'kpropd-acl')],
                                            self.env_slave,
-                                           'waiting for a kprop connection')
+                                           'ready')
 
     def stop_kpropd(self):
         assert(self._kpropd_proc is not None)

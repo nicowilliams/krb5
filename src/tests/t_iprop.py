@@ -112,4 +112,27 @@ output = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : 9' not in output:
     fail('Update log on slave has incorrect last serial number.')
 
+# Reset the ulog on the slave side to force a reset.
+realm.run_as_slave([kproplog, '-R'])
+output = realm.run_as_slave([kproplog, '-h'])
+if 'Last serial # : None' not in output:
+    fail('Update log on slave has incorrect last serial number.')
+realm.run_as_slave([kproplog, '-h'])
+realm.run_as_slave(['/bin/sleep', '35'])
+# Check that a full resync happened.
+output = realm.run_as_slave([kproplog, '-h'])
+if 'Last serial # : 9' not in output:
+    fail('Update log on slave has incorrect last serial number.')
+
+# Make another change.
+realm.run_kadminl('modprinc +allow_tix w')
+output = realm.run_as_master([kproplog, '-h'])
+if 'Last serial # : 10' not in output:
+    fail('Update log on master has incorrect last serial number.')
+
+realm.run_as_slave(['/bin/sleep', '35'])
+output = realm.run_as_slave([kproplog, '-h'])
+if 'Last serial # : 10' not in output:
+    fail('Update log on slave has incorrect last serial number.')
+
 success('iprop tests.')

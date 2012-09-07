@@ -899,7 +899,7 @@ class K5Realm(object):
                                             '-p', kdb5_util,
                                             '-C', kprop,
                                             '-F',
-                                            os.join(self.testdir,
+                                            os.path.join(self.testdir,
                                                     'master-dump')],
                                             self.env_master, 'starting...')
 

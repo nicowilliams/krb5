@@ -45,7 +45,7 @@ realm.run_as_master(['/bin/bash', '-c', ' '.join([kadmind, '-nofork',
                      os.path.join(realm.testdir, 'master-dump'),
                      '>>' + os.path.join(realm.testdir, 'kadmind5.log'),
                      '2>&1', '&' ])])
-realm.run_as_slave(['/bin/sleep', '5'])
+realm.run_as_slave(['/bin/sleep', '15'])
 
 # Make some changes to the master db.
 realm.addprinc('wakawaka')
@@ -60,7 +60,8 @@ realm.run_kadminl('modprinc -allow_tix w')
 realm.run_kadminl('modprinc +allow_tix w')
 
 output = realm.run_as_master([kproplog, '-h'])
-# XXX examine kproplog output
+if 'Last serial # : 7' not in output:
+    fail('Update log on master has incorrect last serial number.')
 
 # Set up the kpropd acl file.
 acl_file = os.path.join(realm.testdir, 'kpropd-acl')
@@ -68,7 +69,7 @@ acl = open(acl_file, 'w')
 acl.write(realm.host_princ + '\n')
 acl.close()
 
-# XXX need to start this as a daemon; need k5test support, sentinel
+# XXX need to start this as a daemon; need k5test support, sentinel(s)
 incoming = os.path.join(realm.testdir, 'incoming-slave-datatrans')
 realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-D',
                     '-P', kprop_port, '-f', incoming, '-p', kdb5_util,
@@ -77,13 +78,36 @@ realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-D',
                     '2>&1', '&' ])])
 #realm.start_kpropd()
 realm.run_kadminl('modprinc -allow_tix w')
-realm.run_as_slave(['/bin/sleep', '15'])
 output = realm.run_as_master([kproplog, '-h'])
+if 'Last serial # : 8' not in output:
+    fail('Update log on master has incorrect last serial number.')
+
+# We need to give iprop (really, a full resync here and maybe an
+# incremental) a chance to happen.
+#
+# Sometimes we need to wait a long time because kpropd's do_iprop()
+# can race with kadmind and fail to kadm5 init, which leads -apparently-
+# to some backoff effect.
+realm.run_as_slave(['/bin/sleep', '35'])
+
+# Now check that iprop happened.  Note that we depend on timing here,
+# thus the above sleep, but there's no way to wait synchronously or force
+# iprop to happen (since iprop here is a pull system) and then wait for
+# it synchronously.
 output = realm.run_as_slave([kproplog, '-h'])
-realm.run_kadminl('modprinc -allow_tix w')
+if 'Last serial # : 8' not in output:
+    fail('Update log on slave has incorrect last serial number.')
+
+# Make another change.
 realm.run_kadminl('modprinc +allow_tix w')
-realm.run_as_slave(['/bin/sleep', '15'])
 output = realm.run_as_master([kproplog, '-h'])
+if 'Last serial # : 9' not in output:
+    fail('Update log on master has incorrect last serial number.')
+
+# Check that we're at sno 9 on the slave side too.
+realm.run_as_slave(['/bin/sleep', '35'])
 output = realm.run_as_slave([kproplog, '-h'])
+if 'Last serial # : 9' not in output:
+    fail('Update log on slave has incorrect last serial number.')
 
 success('iprop tests.')

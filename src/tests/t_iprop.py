@@ -39,12 +39,14 @@ dumpfile = os.path.join(realm.testdir, 'dump')
 realm.run_as_master([kdb5_util, 'dump', dumpfile])
 realm.run_as_slave([kdb5_util, 'load', dumpfile])
 realm.run_as_slave([kdb5_util, 'stash', '-P', 'master'])
-#realm.start_kadmind()
-realm.run_as_master(['/bin/bash', '-c', ' '.join([kadmind, '-nofork',
-                     '-p', kdb5_util, '-F',
-                     os.path.join(realm.testdir, 'master-dump'),
-                     '>>' + os.path.join(realm.testdir, 'kadmind5.log'),
-                     '2>&1', '&' ])])
+
+## For debugging comment this and uncomment the subsequent lines.
+realm.start_kadmind()
+#realm.run_as_master(['/bin/bash', '-c', ' '.join([kadmind, '-nofork',
+#                     '-p', kdb5_util, '-F',
+#                     os.path.join(realm.testdir, 'master-dump'),
+#                     '>>' + os.path.join(realm.testdir, 'kadmind5.log'),
+#                     '2>&1', '&' ])])
 realm.run_as_slave(['/bin/sleep', '15'])
 
 # Make some changes to the master db.
@@ -69,14 +71,14 @@ acl = open(acl_file, 'w')
 acl.write(realm.host_princ + '\n')
 acl.close()
 
-# XXX need to start this as a daemon; need k5test support, sentinel(s)
-incoming = os.path.join(realm.testdir, 'incoming-slave-datatrans')
-realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-D',
-                    '-P', kprop_port, '-f', incoming, '-p', kdb5_util,
-                    '-a', acl_file,
-                    '>' + os.path.join(realm.testdir, 'kpropd-slave.log'),
-                    '2>&1', '&' ])])
-#realm.start_kpropd()
+## For debugging comment this and uncomment the subsequent lines.
+realm.start_kpropd()
+#incoming = os.path.join(realm.testdir, 'incoming-slave-datatrans')
+#realm.run_as_slave(['/bin/bash', '-c', ' '.join([kpropd, '-d', '-D',
+#                    '-P', kprop_port, '-f', incoming, '-p', kdb5_util,
+#                    '-a', acl_file,
+#                    '>' + os.path.join(realm.testdir, 'kpropd-slave.log'),
+#                    '2>&1', '&' ])])
 realm.run_kadminl('modprinc -allow_tix w')
 output = realm.run_as_master([kproplog, '-h'])
 if 'Last serial # : 8' not in output:

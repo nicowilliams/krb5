@@ -208,6 +208,7 @@ kill_do_standalone(int sig)
                     (int)fullprop_child);
         kill(fullprop_child, sig);
     }
+    exit(0);
 }
 
 static
@@ -261,6 +262,12 @@ main(argc, argv)
 #endif
     }
 
+    /*
+     * XXX Not really, but daemon() redirects stdout/stderr to
+     * /dev/null, and we need a sentinel for the test framework.
+     */
+    printf(_("ready\n"));
+    fflush(stdout);
     if (!debug && !nodaemon)
         daemon(0, 0);
 
@@ -311,6 +318,7 @@ main(argc, argv)
     signal(SIGHUP, kill_do_standalone);
     signal(SIGINT, kill_do_standalone);
     signal(SIGQUIT, kill_do_standalone);
+    signal(SIGTERM, kill_do_standalone);
     signal(SIGSEGV, kill_do_standalone);
     atexit(atexit_kill_do_standalone);
     fullprop_child = fork();
@@ -1252,7 +1260,6 @@ void PRS(argv)
                     break;
                 case 'D':
                     nodaemon++;
-                    debug++;
                     break;
                 case 'd':
                     debug++;

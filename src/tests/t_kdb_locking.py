@@ -20,6 +20,7 @@ p = 'foo'
 realm = K5Realm(kdc_conf=kdc_conf, create_user=False)
 realm.addprinc(p, p)
 
+kdc_log = os.path.join(realm.testdir, 'kdc.log')
 kadm5_lock = os.path.join(realm.testdir, 'master-db.kadm5.lock')
 if not os.path.exists(kadm5_lock):
     fail('kadm5 lock file not created: ' + kadm5_lock)
@@ -29,6 +30,10 @@ try:
     realm.kinit(p, p)
 except:
     1
+
+f = open(kdc_log, 'r')
+if 'A service is not available' not in f.read():
+    fail('krb5kdc should have returned service not available error')
 
 try:
     f = open(kadm5_lock, 'w')

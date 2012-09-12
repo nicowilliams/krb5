@@ -426,8 +426,8 @@ ctx_lock(krb5_context context, krb5_db2_context *dbc, int lockmode)
     if (dbc->db_locks_held == 0 || dbc->db_lock_mode < kmode) {
         /* Acquire or upgrade the lock. */
         retval = krb5_lock_file(context, dbc->db_lf_file, kmode);
+        /* Check if we tried to lock something not open for write. */
         if (retval == EBADF && kmode == KRB5_LOCKMODE_EXCLUSIVE)
-            /* Tried to lock something not open for write. */
             return KRB5_KDB_CANTLOCK_DB;
         else if (retval == EACCES || retval == EAGAIN || retval == EWOULDBLOCK)
             return KRB5_KDB_CANTLOCK_DB;

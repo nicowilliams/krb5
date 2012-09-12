@@ -925,10 +925,6 @@ cleanup:
     return retval;
 }
 
-/*
- * This typedef is here so we don't confuse cscope with a function
- * pointer type declaration in the argument list of ctx_iterate().
- */
 typedef krb5_error_code (*ctx_iterate_cb)(krb5_pointer, krb5_db_entry *);
 
 static krb5_error_code

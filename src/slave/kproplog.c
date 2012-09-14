@@ -569,6 +569,12 @@ main(int argc, char **argv)
         ulog->db_version_num = KDB_VERSION;
         ulog->kdb_state = KDB_STABLE;
         ulog->kdb_block = ULOG_BLOCK;
+        ulog->kdb_first_sno = 0;
+        ulog->kdb_first_time.seconds = 0;
+        ulog->kdb_first_time.useconds = 0;
+        ulog->kdb_last_sno = 0;
+        ulog->kdb_last_time.seconds = 0;
+        ulog->kdb_last_time.useconds = 0;
         ulog_sync_header(ulog);
         printf(_("Reinitialized the ulog.\n"));
         exit(0);

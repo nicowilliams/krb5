@@ -215,6 +215,7 @@ atexit_kill_do_standalone(void)
 {
     if (fullprop_child > 0)
         kill(fullprop_child, SIGHUP);
+    exit(1);
 }
 
 int
@@ -448,8 +449,9 @@ do_standalone(int wfd)
                         _("while waiting to receive database"));
                 exit(1);
             }
-            if (debug)
-                fprintf(stderr, _("doit() exited, maybe it succeeded?\n"));
+	    if (debug)
+		fprintf(stderr, _("Database load process for full propagation "
+				  "completed.\n"));
 
             close(s);
 
@@ -457,9 +459,6 @@ do_standalone(int wfd)
             if (wfd >= 0) {
                 ssize_t bytes;
 
-                if (debug)
-                    fprintf(stderr, _("Database load for full propagation "
-                                      "completed.\n"));
                 report.prop_time = time(NULL);
                 bytes = write(wfd, &report, sizeof(report));
                 if (bytes == -1 && errno == EPIPE)
@@ -682,13 +681,11 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
         save_errno = errno;
         /* Assert: matched pipe I/Os this small are atomic */
         assert(bytes == -1 || bytes == 0 || bytes == sizeof(report));
-        if (debug)
-            fprintf(stderr, _("wait_for_fullprop() == %d (%s)\n"), bytes,
-                    strerror(errno));
         if (bytes == -1 && errno != EINTR) {
             syslog(LOG_ERR, "I/O error while reading status of full resync\n");
-            if (debug)
-                fprintf(stderr, _("Could not read status of full resync\n"));
+	    if (bytes == -1 && debug)
+		fprintf(stderr, _("Could not read status of full resync: %s "
+			"(%d)\n"), strerror(errno), errno);
         }
         errno = save_errno;
         if (bytes <= 0) {
@@ -829,8 +826,10 @@ reinit:
     /*
      * Authentication, initialize rpcsec_gss handle etc.
      */
-    if (debug)
-        fprintf(stderr, _("Initializing kadm5\n"));
+    if (debug) {
+        fprintf(stderr, _("Initializing kadm5 as client %s\n"),
+		iprop_svc_princstr);
+    }
     retval = kadm5_init_with_skey(kpropd_context, iprop_svc_princstr,
                                   srvtab,
                                   master_svc_princstr,
@@ -1445,7 +1444,7 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
     }
 
     retval = krb5_recvauth(context, &auth_context, (void *) &fd,
-                           kprop_version, server, 0, keytab, &ticket);
+			   kprop_version, server 0, keytab, &ticket);
     if (retval) {
         syslog(LOG_ERR, _("Error in krb5_recvauth: %s"),
                error_message(retval));

@@ -693,7 +693,8 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
                 fprintf(stderr, "Fullprop failed (IO error or child died)\n");
             return 0;
         }
-        if (report.prop_progress && report.prop_time >= start_time)
+        if (report.prop_progress && !report.prop_complete &&
+	    report.prop_time >= start_time)
             alarm(progress_timeout); /* xfer started or making progress */
     } while (!report.load_complete || report.prop_time < start_time);
 

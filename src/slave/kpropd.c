@@ -207,6 +207,8 @@ kill_do_standalone(int sig)
                     (int)fullprop_child);
         kill(fullprop_child, sig);
     }
+    signal(sig, SIG_DFL);
+    kill(getpid(), sig);
 }
 
 static
@@ -215,7 +217,6 @@ atexit_kill_do_standalone(void)
 {
     if (fullprop_child > 0)
         kill(fullprop_child, SIGHUP);
-    exit(1);
 }
 
 int

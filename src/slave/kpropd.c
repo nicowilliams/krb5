@@ -898,6 +898,7 @@ reinit:
 
     for (;;) {
         int rvret;
+	struct timeval iprop_start;
 
         incr_ret = NULL;
         full_ret = NULL;
@@ -917,6 +918,7 @@ reinit:
 
         if (debug)
             fprintf(stderr, _("Calling iprop_get_updates_1()\n"));
+	gettimeofday(&iprop_start, NULL);
         incr_ret = iprop_get_updates_1(&mylast, handle->clnt);
         if (incr_ret == (kdb_incr_result_t *)NULL) {
             clnt_perror(handle->clnt,
@@ -1023,7 +1025,6 @@ reinit:
                         _("Got incremental updates from the master\n"));
             retval = ulog_replay(kpropd_context, incr_ret,
                                  db_args);
-
             if (retval) {
                 const char *msg =
                     krb5_get_error_message(kpropd_context, retval);
@@ -1036,9 +1037,20 @@ reinit:
                 break;
             }
 
-            if (debug)
-                fprintf(stderr, _("Update transfer "
-                                  "from master was OK\n"));
+            if (debug) {
+                struct timeval iprop_end;
+		uint64_t us;
+
+                gettimeofday(&iprop_end, NULL);
+		us = (iprop_end.tv_sec * 1000000 + iprop_end.tv_usec) -
+		    (iprop_start.tv_sec * 1000000 + iprop_start.tv_usec);
+
+                fprintf(stderr, _("Incremental updates: %d updates / "
+                                  "%llu us\n"),
+                        incr_ret->updates.kdb_ulog_t_len, us);
+		syslog(LOG_DEBUG, "Incremental updates: %d updates / %llu us",
+                       incr_ret->updates.kdb_ulog_t_len, us);
+	    }
             break;
 
         case UPDATE_PERM_DENIED:
@@ -1857,13 +1869,18 @@ load_database(context, kdb_util, database_file_name)
         }
     }
 
+    if (!WIFEXITED(waitb)) {
+        com_err(progname, 0, _("%s load terminated by %d"),
+                kdb_util, WTERMSIG(waitb));
+        exit(1);
+    }
+
     error_ret = WEXITSTATUS(waitb);
     if (error_ret) {
         com_err(progname, 0, _("%s returned a bad exit status (%d)"),
                 kdb_util, error_ret);
         exit(1);
     }
-    return;
 }
 
 /*

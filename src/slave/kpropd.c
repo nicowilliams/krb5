@@ -668,8 +668,7 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
         signal(SIGALRM, alarm_handler);
 #endif
     }
-    syslog(LOG_INFO, "kpropd: Waiting for report of full resync from "
-           "child process.");
+    syslog(LOG_INFO, "Waiting for report of full resync from child process.");
     if (debug) {
         fprintf(stderr, _("Waiting for report of full resync from child "
                           "process\n"));
@@ -943,7 +942,7 @@ reinit:
         case UPDATE_FULL_RESYNC_NEEDED:
             if (debug)
                 fprintf(stderr, _("Full resync needed\n"));
-            syslog(LOG_INFO, "kpropd: Full resync needed.");
+            syslog(LOG_INFO, "Full resync needed.");
             /*
              * We dont do bother with a full resync again if the last
              * time the incr_ret->lastentry was the same as now.
@@ -970,7 +969,7 @@ reinit:
             case UPDATE_OK:
                 if (debug)
                     fprintf(stderr, _("Full resync request granted\n"));
-                syslog(LOG_INFO, "kpropd: Full resync request granted.");
+                syslog(LOG_INFO, "Full resync request granted.");
                 backoff_cnt = 0;
                 rvret = wait_for_fullprop(rfd, start_time,
                                           params.iprop_dump_timeout,
@@ -992,13 +991,13 @@ reinit:
             case UPDATE_PERM_DENIED:
                 if (debug)
                     fprintf(stderr, _("Full resync permission denied\n"));
-                syslog(LOG_ERR, "kpropd: Full resync, permission denied.");
+                syslog(LOG_ERR, "Full resync, permission denied.");
                 goto error;
 
             case UPDATE_ERROR:
                 if (debug)
                     fprintf(stderr, _("Full resync error from master\n"));
-                syslog(LOG_ERR, "kpropd: Full resync, "
+                syslog(LOG_ERR, "Full resync, "
                        "error returned from master KDC.");
                 goto error;
 
@@ -1010,8 +1009,8 @@ reinit:
                     fprintf(stderr,
                             _("Full resync invalid result from master\n"));
                 }
-                syslog(LOG_ERR, _("kpropd: Full resync,"
-                                  " invalid return from master KDC."));
+                syslog(LOG_ERR, _("Full resync, "
+                                  "invalid return from master KDC."));
                 break;
             }
             break;
@@ -1060,13 +1059,13 @@ reinit:
         case UPDATE_PERM_DENIED:
             if (debug)
                 fprintf(stderr, _("get_updates permission denied\n"));
-            syslog(LOG_ERR, "kpropd: get_updates, permission denied.");
+            syslog(LOG_ERR, "get_updates, permission denied.");
             goto error;
 
         case UPDATE_ERROR:
             if (debug)
                 fprintf(stderr, _("get_updates error from master\n"));
-            syslog(LOG_ERR, _("kpropd: get_updates, error "
+            syslog(LOG_ERR, _("get_updates, error "
                               "returned from master KDC."));
             goto error;
 
@@ -1094,8 +1093,7 @@ reinit:
             backoff_cnt = 0;
             if (debug)
                 fprintf(stderr, _("get_updates invalid result from master\n"));
-            syslog(LOG_ERR,
-                   "kpropd: get_updates, invalid return from master KDC.");
+            syslog(LOG_ERR, "get_updates, invalid return from master KDC.");
             break;
         }
 
@@ -1128,8 +1126,7 @@ reinit:
 error:
     if (debug)
         fprintf(stderr, _("ERROR returned by master, bailing\n"));
-    syslog(LOG_ERR, _("kpropd: ERROR returned by master KDC,"
-                      " bailing.\n"));
+    syslog(LOG_ERR, _("ERROR returned by master KDC, bailing.\n"));
 done:
     if(iprop_svc_princstr)
         free(iprop_svc_princstr);
@@ -1330,13 +1327,8 @@ void PRS(argv)
             /* We don't take any arguments, only options */
             usage();
     }
-    /*
-     * If not in debug mode, switch com_err reporting to syslog
-     */
-    if (! debug) {
-        openlog("kpropd", LOG_PID | LOG_ODELAY, SYSLOG_CLASS);
-        set_com_err_hook(kpropd_com_err_proc);
-    }
+    openlog("kpropd", LOG_PID | LOG_ODELAY, SYSLOG_CLASS);
+    set_com_err_hook(kpropd_com_err_proc);
     /*
      * Get my hostname, so we can construct my service name
      */

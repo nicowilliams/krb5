@@ -194,20 +194,14 @@ void
 alarm_handler(int sig)
 {
     /* Nothing to do, just catch the signal */
-    if (debug)
-        fprintf(stderr, _("Got SIGALRM!\n"));
 }
 
 static
 void
 kill_do_standalone(int sig)
 {
-    if (fullprop_child > 0) {
-        if (debug)
-            fprintf(stderr, _("Killing fullprop child (%d)\n"),
-                    (int)fullprop_child);
+    if (fullprop_child > 0)
         kill(fullprop_child, sig);
-    }
     /* Make sure our exit status code reflects our having been signaled */
     signal(sig, SIG_DFL);
     kill(getpid(), sig);
@@ -450,16 +444,14 @@ do_standalone(int wfd)
             } while (wait_pid == -1 && errno == EINTR);
             if (wait_pid == -1) {
                 /* Something bad happened; panic. */
-                if (debug)
+                if (debug) {
                     fprintf(stderr, _("waitpid() failed to wait for doit() "
                                       "(%d %s)\n"), errno, strerror(errno));
+                }
                 com_err(progname, errno,
                         _("while waiting to receive database"));
                 exit(1);
             }
-	    if (debug)
-		fprintf(stderr, _("Database load process for full propagation "
-				  "completed.\n"));
 
             close(s);
 
@@ -944,7 +936,6 @@ reinit:
         switch (incr_ret->ret) {
 
         case UPDATE_FULL_RESYNC_NEEDED:
-            /* XXX Factor into subroutine */
             if (debug)
                 fprintf(stderr, _("Full resync needed\n"));
             syslog(LOG_INFO, "Full resync needed.");
@@ -1010,9 +1001,10 @@ reinit:
                 backoff_cnt = 0;
                 frdone = 0;
 
-                if (debug)
+                if (debug) {
                     fprintf(stderr,
                             _("Full resync invalid result from master\n"));
+                }
                 syslog(LOG_ERR, _("Full resync, "
                                   "invalid return from master KDC."));
                 break;
@@ -1028,9 +1020,10 @@ reinit:
              * entries using the kdb conv api and will commit
              * the entries to the slave kdc database
              */
-            if (debug)
+            if (debug) {
                 fprintf(stderr,
                         _("Got incremental updates from the master\n"));
+            }
             retval = ulog_replay(kpropd_context, incr_ret,
                                  db_args);
             if (retval) {
@@ -1067,8 +1060,7 @@ reinit:
         case UPDATE_ERROR:
             if (debug)
                 fprintf(stderr, _("get_updates error from master\n"));
-            syslog(LOG_ERR, _("get_updates, error "
-                              "returned from master KDC."));
+            syslog(LOG_ERR, _("get_updates, error returned from master KDC."));
             goto error;
 
         case UPDATE_BUSY:
@@ -1085,8 +1077,7 @@ reinit:
              * Master-slave are in sync
              */
             if (debug)
-                fprintf(stderr, _("Master, slave KDC's "
-                                  "are in-sync, no updates\n"));
+                fprintf(stderr, _("KDC is synchronized with master.\n"));
             backoff_cnt = 0;
             frdone = 0;
             break;
@@ -1109,15 +1100,17 @@ reinit:
          */
         if (backoff_cnt > 0) {
             backoff_time = backoff_from_master(&backoff_cnt);
-            if (debug)
+            if (debug) {
                 fprintf(stderr, _("Busy signal received "
                                   "from master, backoff for %d secs\n"),
                         backoff_time);
+            }
             (void) sleep(backoff_time);
         } else {
-            if (debug)
+            if (debug) {
                 fprintf(stderr, _("Waiting for %d seconds before checking "
                                   "for updates again\n"), pollin);
+            }
             (void) sleep(pollin);
         }
 
@@ -1418,7 +1411,8 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
             com_err(progname, retval, _("while unparsing client name"));
             exit(1);
         }
-        printf("krb5_recvauth(%d, %s, %s, ...)\n", fd, kprop_version, name);
+        printf(stderr, "krb5_recvauth(%d, %s, %s, ...)\n", fd, kprop_version,
+               name);
         free(name);
     }
 

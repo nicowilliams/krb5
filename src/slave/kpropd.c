@@ -850,7 +850,7 @@ reinit:
             case UPDATE_OK:
                 if (debug)
                     fprintf(stderr, _("Full resync request granted\n"));
-                syslog(LOG_INFO, "kpropd: Full resync request granted.");
+                syslog(LOG_INFO, "Full resync request granted.");
                 backoff_cnt = 0;
                 break;
 
@@ -866,13 +866,13 @@ reinit:
             case UPDATE_PERM_DENIED:
                 if (debug)
                     fprintf(stderr, _("Full resync permission denied\n"));
-                syslog(LOG_ERR, "kpropd: Full resync, permission denied.");
+                syslog(LOG_ERR, "Full resync, permission denied.");
                 goto error;
 
             case UPDATE_ERROR:
                 if (debug)
                     fprintf(stderr, _("Full resync error from master\n"));
-                syslog(LOG_ERR, "kpropd: Full resync, "
+                syslog(LOG_ERR, "Full resync, "
                        "error returned from master KDC.");
                 goto error;
 
@@ -883,8 +883,8 @@ reinit:
                     fprintf(stderr,
                             _("Full resync invalid result from master\n"));
                 }
-                syslog(LOG_ERR, _("kpropd: Full resync,"
-                                  " invalid return from master KDC."));
+                syslog(LOG_ERR, _("Full resync, "
+                                  "invalid return from master KDC."));
                 break;
             }
             break;
@@ -933,13 +933,13 @@ reinit:
         case UPDATE_PERM_DENIED:
             if (debug)
                 fprintf(stderr, _("get_updates permission denied\n"));
-            syslog(LOG_ERR, "kpropd: get_updates, permission denied.");
+            syslog(LOG_ERR, "get_updates, permission denied.");
             goto error;
 
         case UPDATE_ERROR:
             if (debug)
                 fprintf(stderr, _("get_updates error from master\n"));
-            syslog(LOG_ERR, _("kpropd: get_updates, error "
+            syslog(LOG_ERR, _("get_updates, error "
                               "returned from master KDC."));
             goto error;
 
@@ -967,8 +967,7 @@ reinit:
             backoff_cnt = 0;
             if (debug)
                 fprintf(stderr, _("get_updates invalid result from master\n"));
-            syslog(LOG_ERR,
-                   "kpropd: get_updates, invalid return from master KDC.");
+            syslog(LOG_ERR, "get_updates, invalid return from master KDC.");
             break;
         }
 
@@ -1001,16 +1000,14 @@ reinit:
 error:
     if (debug)
         fprintf(stderr, _("ERROR returned by master, bailing\n"));
-    syslog(LOG_ERR, _("kpropd: ERROR returned by master KDC,"
-                      " bailing.\n"));
+    syslog(LOG_ERR, _("ERROR returned by master KDC, bailing.\n"));
 done:
     if(iprop_svc_princstr)
         free(iprop_svc_princstr);
     if (master_svc_princstr)
         free(master_svc_princstr);
     if ((retval = krb5_cc_close(kpropd_context, cc))) {
-        com_err(progname, retval,
-                _("while closing default ccache"));
+        com_err(progname, retval, _("while closing default ccache"));
         return retval;
     }
     if (def_realm && kpropd_context)
@@ -1203,13 +1200,9 @@ void PRS(argv)
             /* We don't take any arguments, only options */
             usage();
     }
-    /*
-     * If not in debug mode, switch com_err reporting to syslog
-     */
-    if (! debug) {
-        openlog("kpropd", LOG_PID | LOG_ODELAY, SYSLOG_CLASS);
+    openlog("kpropd", LOG_PID | LOG_ODELAY, SYSLOG_CLASS);
+    if (!debug)
         set_com_err_hook(kpropd_com_err_proc);
-    }
     /*
      * Get my hostname, so we can construct my service name
      */

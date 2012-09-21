@@ -193,8 +193,6 @@ static void
 alarm_handler(int sig)
 {
     /* Nothing to do, just catch the signal */
-    if (debug)
-        fprintf(stderr, _("Got SIGALRM!\n"));
 }
 
 static void
@@ -206,7 +204,6 @@ kill_do_standalone(int sig)
                     (int)fullprop_child);
         }
         kill(fullprop_child, sig);
-    }
     /* Make sure our exit status code reflects our having been signaled */
     signal(sig, SIG_DFL);
     kill(getpid(), sig);
@@ -942,7 +939,6 @@ reinit:
         switch (incr_ret->ret) {
 
         case UPDATE_FULL_RESYNC_NEEDED:
-            /* XXX Factor into subroutine */
             if (debug)
                 fprintf(stderr, _("Full resync needed\n"));
             syslog(LOG_INFO, "Full resync needed.");
@@ -1068,8 +1064,7 @@ reinit:
         case UPDATE_ERROR:
             if (debug)
                 fprintf(stderr, _("get_updates error from master\n"));
-            syslog(LOG_ERR, _("get_updates, error "
-                              "returned from master KDC."));
+            syslog(LOG_ERR, _("get_updates, error returned from master KDC."));
             goto error;
 
         case UPDATE_BUSY:
@@ -1086,8 +1081,7 @@ reinit:
              * Master-slave are in sync
              */
             if (debug)
-                fprintf(stderr, _("Master, slave KDC's "
-                                  "are in-sync, no updates\n"));
+                fprintf(stderr, _("KDC is synchronized with master.\n"));
             backoff_cnt = 0;
             frdone = 0;
             break;
@@ -1110,10 +1104,11 @@ reinit:
          */
         if (backoff_cnt > 0) {
             backoff_time = backoff_from_master(&backoff_cnt);
-            if (debug)
+            if (debug) {
                 fprintf(stderr, _("Busy signal received "
                                   "from master, backoff for %d secs\n"),
                         backoff_time);
+            }
             (void) sleep(backoff_time);
         } else {
             if (debug) {
@@ -1420,7 +1415,8 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
             com_err(progname, retval, _("while unparsing client name"));
             exit(1);
         }
-        printf("krb5_recvauth(%d, %s, %s, ...)\n", fd, kprop_version, name);
+        printf(stderr, "krb5_recvauth(%d, %s, %s, ...)\n", fd, kprop_version,
+               name);
         free(name);
     }
 

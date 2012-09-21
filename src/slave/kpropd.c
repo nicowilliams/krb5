@@ -897,7 +897,8 @@ reinit:
 
     for (;;) {
         int rvret;
-	struct timeval iprop_start;
+	struct timeval iprop_start, iprop_end;
+        uint64_t us;
 
         incr_ret = NULL;
         full_ret = NULL;
@@ -1036,19 +1037,16 @@ reinit:
                 break;
             }
 
+            gettimeofday(&iprop_end, NULL);
+            us = (iprop_end.tv_sec * 1000000 + iprop_end.tv_usec) -
+                (iprop_start.tv_sec * 1000000 + iprop_start.tv_usec);
+            syslog(LOG_INFO, "Incremental updates: %d updates / %llu us",
+                   incr_ret->updates.kdb_ulog_t_len, us);
+
             if (debug) {
-                struct timeval iprop_end;
-		uint64_t us;
-
-                gettimeofday(&iprop_end, NULL);
-		us = (iprop_end.tv_sec * 1000000 + iprop_end.tv_usec) -
-		    (iprop_start.tv_sec * 1000000 + iprop_start.tv_usec);
-
                 fprintf(stderr, _("Incremental updates: %d updates / "
                                   "%llu us\n"),
                         incr_ret->updates.kdb_ulog_t_len, us);
-		syslog(LOG_DEBUG, "Incremental updates: %d updates / %llu us",
-                       incr_ret->updates.kdb_ulog_t_len, us);
 	    }
             break;
 

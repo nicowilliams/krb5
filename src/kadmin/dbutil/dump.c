@@ -2725,7 +2725,11 @@ load_db(argc, argv)
      * Auto-detect dump version if we weren't told, verify if we
      * were told.
      */
-    fgets(buf, sizeof(buf), f);
+    if (fgets(buf, sizeof(buf), f) == NULL) {
+        exit_status++;
+        if (f != stdin) fclose(f);
+        return;
+    }
     if (load) {
         /* only check what we know; some headers only contain a prefix */
         /* NB: this should work for ipropx even though load is iprop */
@@ -2759,6 +2763,34 @@ load_db(argc, argv)
             return;
         }
     }
+
+    /*
+     * Fail if the dump is not in iprop format and iprop is enabled and
+     * we have a ulog -- we don't want an accidental stepping on our
+     * toes by a sysadmin or wayward cronjob left over from before
+     * enabling iprop.
+     */
+    if (global_params.iprop_enabled && 
+            ulog_map(kcontext, global_params.iprop_logfile,
+                      global_params.iprop_ulogsize, FKPROPD,
+                      db5util_db_args)) {
+        fprintf(stderr, "Could not open iprop ulog\n");
+        exit_status++;
+        if (dumpfile)
+            fclose(f);
+        return;
+    }
+    if (global_params.iprop_enabled && !load->iprop) {
+        if (log_ctx->ulog != NULL && log_ctx->ulog->kdb_first_time.seconds &&
+            (log_ctx->ulog->kdb_first_sno || log_ctx->ulog->kdb_last_sno)) {
+            fprintf(stderr, _("%s: Loads disallowed when iprop is enabled "
+                              "and a ulog is present"),
+                    progname);
+            exit_status++;
+            goto error;
+        }
+    }
+
     if (load->updateonly && !(flags & FLAG_UPDATE)) {
         fprintf(stderr, _("%s: dump version %s can only be loaded with the "
                           "-update flag\n"), progname, load->name);
@@ -2822,14 +2854,6 @@ load_db(argc, argv)
         else
             caller = FKPROPD;
 
-        if (ulog_map(kcontext, global_params.iprop_logfile,
-                     global_params.iprop_ulogsize, caller, db5util_db_args)) {
-            fprintf(stderr, _("%s: Could not map log\n"),
-                    progname);
-            exit_status++;
-            goto error;
-        }
-
         /*
          * We don't want to take out the ulog out from underneath
          * kadmind so we reinit the header log.
@@ -2852,14 +2876,28 @@ load_db(argc, argv)
 
             if (!add_update) {
                 unsigned int ipropx_version = IPROPX_VERSION_0;
+                int nread;
 
-                if (!strncmp(buf, "ipropx ", sizeof("ipropx ") - 1))
-                    sscanf(buf, "%1023s %u %u %u %u", iheader,
-                           &ipropx_version, &last_sno,
-                           &last_seconds, &last_useconds);
-                else
-                    sscanf(buf, "%1023s %u %u %u", iheader, &last_sno,
-                           &last_seconds, &last_useconds);
+                fprintf(stderr, "iprop header is: %s\n", buf);
+                if (!strncmp(buf, "ipropx ", sizeof("ipropx ") - 1)) {
+                    nread = sscanf(buf, "%1023s %u %u %u %u", iheader,
+                                   &ipropx_version, &last_sno,
+                                   &last_seconds, &last_useconds);
+                    if (nread != 5) {
+                        fprintf(stderr, "Invalid iprop header\n");
+                        exit_status++;
+                        return;
+                    }
+                } else {
+                    nread = sscanf(buf, "%1023s %u %u %u", iheader,
+                                   &last_sno, &last_seconds,
+                                   &last_useconds);
+                    if (nread != 4) {
+                        fprintf(stderr, "Invalid iprop header\n");
+                        exit_status++;
+                        return;
+                    }
+                }
 
                 switch (ipropx_version) {
                 case IPROPX_VERSION_0:
@@ -2875,11 +2913,16 @@ load_db(argc, argv)
                     goto error;
                 }
 
+                fprintf(stderr, "Initializing ulog with:\n"
+                        "\tlast_sno = %d, last_time.seconds = %d, "
+                        "last_time.useconds = %d\n", last_sno, last_seconds,
+                        last_useconds);
                 log_ctx->ulog->kdb_last_sno = last_sno;
                 log_ctx->ulog->kdb_last_time.seconds =
                     last_seconds;
                 log_ctx->ulog->kdb_last_time.useconds =
                     last_useconds;
+                ulog_sync_header(log_ctx->ulog);
             }
         }
     }

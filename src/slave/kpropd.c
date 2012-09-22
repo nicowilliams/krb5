@@ -488,7 +488,7 @@ void doit(int fd)
                     host, sizeof(host), NULL, 0, 0) == 0) {
         syslog(LOG_INFO, _("Connection from %s"), host);
         if (debug)
-            printf("Connection from %s\n", host);
+            fprintf(stderr, "Connection from %s\n", host);
     }
 
     /*
@@ -1366,7 +1366,8 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
             exit(1);
         }
 
-        printf(_("authenticated client: %s (etype == %s)\n"), name, etypebuf);
+        fprintf(stderr, _("authenticated client: %s (etype == %s)\n"),
+                name, etypebuf);
         free(name);
     }
 
@@ -1653,7 +1654,7 @@ load_database(context, kdb_util, database_file_name)
     kdb_log_context *log_ctx;
 
     if (debug)
-        printf("calling kdb5_util to load database\n");
+        fprintf(stderr, "calling kdb5_util to load database\n");
 
     log_ctx = context->kdblog_context;
 
@@ -1685,7 +1686,7 @@ load_database(context, kdb_util, database_file_name)
         /*NOTREACHED*/
     default:
         if (debug)
-            printf("Child PID is %d\n", child_pid);
+            fprintf(stderr, "Load PID is %d\n", child_pid);
         if (wait(&waitb) < 0) {
             com_err(progname, errno, _("while waiting for %s"), kdb_util);
             exit(1);

@@ -509,9 +509,9 @@ void doit(int fd, int wfd)
 
     if (getnameinfo((const struct sockaddr *) &from, fromlen,
                     host, sizeof(host), NULL, 0, 0) == 0) {
-        syslog(LOG_INFO, _("Connection from %s"), host);
+        syslog(LOG_INFO, "Connection from %s", host);
         if (debug)
-            printf("Connection from %s\n", host);
+            fprintf(stderr, "Connection from %s\n", host);
     }
 
     /*
@@ -1008,8 +1008,8 @@ reinit:
                     fprintf(stderr,
                             _("Full resync invalid result from master\n"));
                 }
-                syslog(LOG_ERR, _("Full resync, "
-                                  "invalid return from master KDC."));
+                syslog(LOG_ERR, "Full resync, "
+                       "invalid return from master KDC.");
                 break;
             }
             break;
@@ -1064,7 +1064,7 @@ reinit:
         case UPDATE_ERROR:
             if (debug)
                 fprintf(stderr, _("get_updates error from master\n"));
-            syslog(LOG_ERR, _("get_updates, error returned from master KDC."));
+            syslog(LOG_ERR, "get_updates, error returned from master KDC.");
             goto error;
 
         case UPDATE_BUSY:
@@ -1124,7 +1124,7 @@ reinit:
 error:
     if (debug)
         fprintf(stderr, _("ERROR returned by master, bailing\n"));
-    syslog(LOG_ERR, _("ERROR returned by master KDC, bailing.\n"));
+    syslog(LOG_ERR, "ERROR returned by master KDC, bailing.\n");
 done:
     if(iprop_svc_princstr)
         free(iprop_svc_princstr);
@@ -1415,14 +1415,14 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
             com_err(progname, retval, _("while unparsing client name"));
             exit(1);
         }
-        printf(stderr, "krb5_recvauth(%d, %s, %s, ...)\n", fd, kprop_version,
+        fprintf(stderr, "krb5_recvauth(%d, %s, %s, ...)\n", fd, kprop_version,
                name);
         free(name);
     }
 
     retval = krb5_auth_con_init(context, &auth_context);
     if (retval) {
-        syslog(LOG_ERR, _("Error in krb5_auth_con_ini: %s"),
+        syslog(LOG_ERR, "Error in krb5_auth_con_ini: %s",
                error_message(retval));
         exit(1);
     }
@@ -1430,7 +1430,7 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
     retval = krb5_auth_con_setflags(context, auth_context,
                                     KRB5_AUTH_CONTEXT_DO_SEQUENCE);
     if (retval) {
-        syslog(LOG_ERR, _("Error in krb5_auth_con_setflags: %s"),
+        syslog(LOG_ERR, "Error in krb5_auth_con_setflags: %s",
                error_message(retval));
         exit(1);
     }
@@ -1438,7 +1438,7 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
     retval = krb5_auth_con_setaddrs(context, auth_context, receiver_addr,
                                     sender_addr);
     if (retval) {
-        syslog(LOG_ERR, _("Error in krb5_auth_con_setaddrs: %s"),
+        syslog(LOG_ERR, "Error in krb5_auth_con_setaddrs: %s",
                error_message(retval));
         exit(1);
     }
@@ -1446,7 +1446,7 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
     if (srvtab) {
         retval = krb5_kt_resolve(context, srvtab, &keytab);
         if (retval) {
-            syslog(LOG_ERR, _("Error in krb5_kt_resolve: %s"),
+            syslog(LOG_ERR, "Error in krb5_kt_resolve: %s",
                    error_message(retval));
             exit(1);
         }
@@ -1455,14 +1455,14 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
     retval = krb5_recvauth(context, &auth_context, (void *) &fd,
 			   kprop_version, server, 0, keytab, &ticket);
     if (retval) {
-        syslog(LOG_ERR, _("Error in krb5_recvauth: %s"),
+        syslog(LOG_ERR, "Error in krb5_recvauth: %s",
                error_message(retval));
         exit(1);
     }
 
     retval = krb5_copy_principal(context, ticket->enc_part2->client, clientp);
     if (retval) {
-        syslog(LOG_ERR, _("Error in krb5_copy_prinicpal: %s"),
+        syslog(LOG_ERR, "Error in krb5_copy_prinicpal: %s",
                error_message(retval));
         exit(1);
     }
@@ -1485,7 +1485,8 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
             exit(1);
         }
 
-        printf(_("authenticated client: %s (etype == %s)\n"), name, etypebuf);
+        fprintf(stderr, _("authenticated client: %s (etype == %s)\n"),
+                name, etypebuf);
         free(name);
     }
 
@@ -1803,7 +1804,7 @@ load_database(context, kdb_util, database_file_name)
     kdb_log_context *log_ctx;
 
     if (debug)
-        printf("calling kdb5_util to load database\n");
+        fprintf(stderr, "calling kdb5_util to load database\n");
 
     log_ctx = context->kdblog_context;
 
@@ -1857,7 +1858,7 @@ load_database(context, kdb_util, database_file_name)
         /*NOTREACHED*/
     default:
         if (debug)
-            printf("Child PID is %d\n", child_pid);
+            fprintf(stderr, "Load PID is %d\n", child_pid);
         if (wait(&waitb) < 0) {
             com_err(progname, errno, _("while waiting for %s"), kdb_util);
             exit(1);

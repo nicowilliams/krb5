@@ -323,7 +323,7 @@ main(argc, argv)
         com_err(progname, errno, _("do_iprop failed.\n"));
         break;
     case 0:
-	do_standalone(pipefds[1]);
+        do_standalone(pipefds[1]);
         /* do_standalone() should never return */
         /* NOTREACHED */
         break;
@@ -683,9 +683,9 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
         assert(bytes == -1 || bytes == 0 || bytes == sizeof(report));
         if (bytes == -1 && errno != EINTR) {
             syslog(LOG_ERR, "I/O error while reading status of full resync\n");
-	    if (bytes == -1 && debug)
-		fprintf(stderr, _("Could not read status of full resync: %s "
-			"(%d)\n"), strerror(errno), errno);
+            if (bytes == -1 && debug)
+                fprintf(stderr, _("Could not read status of full resync: %s "
+                        "(%d)\n"), strerror(errno), errno);
         }
         errno = save_errno;
         if (bytes <= 0) {
@@ -694,7 +694,7 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
             return 0;
         }
         if (report.prop_progress && !report.prop_complete &&
-	    report.prop_time >= start_time)
+            report.prop_time >= start_time)
             alarm(progress_timeout); /* xfer started or making progress */
     } while (!report.load_complete || report.prop_time < start_time);
 
@@ -829,7 +829,7 @@ reinit:
      */
     if (debug) {
         fprintf(stderr, _("Initializing kadm5 as client %s\n"),
-		iprop_svc_princstr);
+                iprop_svc_princstr);
     }
     retval = kadm5_init_with_skey(kpropd_context, iprop_svc_princstr,
                                   srvtab,
@@ -897,7 +897,7 @@ reinit:
 
     for (;;) {
         int rvret;
-	struct timeval iprop_start, iprop_end;
+        struct timeval iprop_start, iprop_end;
         uint64_t us;
 
         incr_ret = NULL;
@@ -918,7 +918,7 @@ reinit:
 
         if (debug)
             fprintf(stderr, _("Calling iprop_get_updates_1()\n"));
-	gettimeofday(&iprop_start, NULL);
+        gettimeofday(&iprop_start, NULL);
         incr_ret = iprop_get_updates_1(&mylast, handle->clnt);
         if (incr_ret == (kdb_incr_result_t *)NULL) {
             clnt_perror(handle->clnt,
@@ -1048,7 +1048,7 @@ reinit:
                 fprintf(stderr, _("Incremental updates: %d updates / "
                                   "%llu us\n"),
                         incr_ret->updates.kdb_ulog_t_len, us);
-	    }
+            }
             break;
 
         case UPDATE_PERM_DENIED:
@@ -1449,7 +1449,7 @@ kerberos_authenticate(context, fd, clientp, etype, my_sin)
     }
 
     retval = krb5_recvauth(context, &auth_context, (void *) &fd,
-			   kprop_version, server, 0, keytab, &ticket);
+                           kprop_version, server, 0, keytab, &ticket);
     if (retval) {
         syslog(LOG_ERR, "Error in krb5_recvauth: %s",
                error_message(retval));

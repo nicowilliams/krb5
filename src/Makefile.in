@@ -774,3 +774,7 @@ check-copyright:
 	(cd $(top_srcdir) && \
 	$(FIND) . \( -name '*.[ch]' -o -name '*.hin' \) -print0 | \
 	$(XARGS) -0 python util/krb5-check-copyright.py)
+
+check-cstyle:
+	(cd $(top_srcdir)/.. && \
+	 git diff -M | python src/util/krb5-check-cstyle-diff.py)

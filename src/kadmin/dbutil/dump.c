@@ -1493,6 +1493,9 @@ dump_db(argc, argv)
             update_ok_file(ofile);
             free(tmpofile);
         }
+        if (tmpofile != NULL)
+            unlink(tmpofile);
+        free(tmpofile);
     }
 }
 

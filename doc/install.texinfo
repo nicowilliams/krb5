@@ -911,9 +911,6 @@ Assuming you have configured all of your KDCs to be able to function as
 either the master KDC or a slave KDC (as this document recommends), all
 you need to do to make the changeover is:
 
-If the master KDC is still running, do the following on the @emph{old}
-master KDC:
-
 @enumerate
 @item
 Kill the @code{kadmind} process.
@@ -922,13 +919,13 @@ Kill the @code{kadmind} process.
 Disable the cron job that propagates the database.
 
 @item
-Run your database propagation script manually, to ensure that the slaves
-all have the latest copy of the database.  (@xref{Propagate the Database
-to Each Slave KDC}.)  If there is a need to preserve per-principal
-policy information from the database, you should do a ``kdb5_util dump
--ov'' in order to preserve that information and propogate that dump file
-securely by some means to the slave so that its database has the correct
-state of the per-principal policy information.
+Enable incremental propagation by setting the iprop_enable
+@code{kdc.conf} parameter to true.  See below for more detailed
+instructions.  Do this on the master and slave KDCs.
+
+@item
+Change the slave KDCs so that @code{kpropd} runs as a standalone daemon
+instead of as an inetd nowait service.
 @end enumerate
 
 On the @emph{new} master KDC:
@@ -962,9 +959,9 @@ added in the 1.7 release is intended to address this.
 With incremental propagation enabled, all programs on the master KDC
 that change the database also write information about the changes to
 an ``update log'' file, maintained as a circular buffer of a certain
-size.  A process on each slave KDC connects to a service on the master
-KDC (currently implemented in the @code{kadmind} server) and
-periodically requests the changes that have been made since the last
+size.  A @code{kpropd} process on each slave KDC connects to a service
+on the master KDC (currently implemented in the @code{kadmind} server)
+and periodically requests the changes that have been made since the last
 check.  By default, this check is done every two minutes.  If the
 database has just been modified in the previous several seconds
 (currently the threshold is hard-coded at 10 seconds), the slave will

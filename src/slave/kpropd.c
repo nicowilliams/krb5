@@ -236,6 +236,12 @@ main(argc, argv)
                 _("while checking if stdin is a socket"));
         exit(1);
     }
+    if (S_ISSOCK(st.st_mode))
+        /* We can't be standalong if stdin is a socket, not really */
+        standalone = 0;
+    else
+        /* Corollary: if stdin is not a socket, then we're standalone */
+        standalone = 1;
 
     log_ctx = kpropd_context->kdblog_context;
 
@@ -1269,6 +1275,8 @@ void PRS(argv)
                     debug++;
                     break;
                 case 'S':
+                    fprintf(stderr,
+                            _("warning: The -S option is now deprecated.\n"));
                     standalone++;
                     break;
                 case 'a':

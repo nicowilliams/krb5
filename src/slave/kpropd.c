@@ -225,9 +225,23 @@ main(argc, argv)
     krb5_error_code retval;
     kdb_log_context *log_ctx;
     int pipefds[2];
+    struct stat st;
 
     setlocale(LC_ALL, "");
     PRS(argv);
+
+    if (fstat(0, &st) == -1) {
+        com_err(progname, errno,
+                _("while checking if stdin is a socket"));
+        exit(1);
+    }
+    if (S_ISSOCK(st.st_mode)) {
+        /* We can't be standalong if stdin is a socket, not really */
+        standalone = 0;
+    } else {
+        /* Corollary: if stdin is not a socket, then we're standalone */
+        standalone = 1;
+    }
 
     log_ctx = kpropd_context->kdblog_context;
 
@@ -1262,6 +1276,8 @@ void PRS(argv)
                     debug++;
                     break;
                 case 'S':
+                    fprintf(stderr,
+                            _("warning: The -S option is now deprecated.\n"));
                     standalone++;
                     break;
                 case 'a':

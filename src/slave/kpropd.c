@@ -967,8 +967,8 @@ reinit:
                 syslog(LOG_INFO, "Full resync request granted.");
                 backoff_cnt = 0;
                 rvret = wait_for_fullprop(rfd, start_time,
-                                          params.iprop_dump_tmout,
-                                          params.iprop_full_progress_tmout);
+                                          params.iprop_dump_timeout,
+                                          params.iprop_full_progress_timeout);
                 if (rvret == 0 && errno != 0)
                     return errno; /* XXX Too eager to bail? */
                 frdone = (rvret > 0);

@@ -206,14 +206,14 @@ For each realm, the following tags may be specified:
     incremental propagation.  This is required in both master and
     slave configuration files.
 
-**iprop_dump_tmout**
+**iprop_dump_timeout**
     (Delta time string.)  Specifies the amount of time to wait for a
     full propagation to begin (this relates primarily to the time it
     takes to dump the KDB on the master KDC).  This is optional in
     configuration files, and is used by slave KDCs only.  The default
     value is 5 minutes (``5m``).
 
-**iprop_full_progress_tmout**
+**iprop_full_progress_timeout**
     (Delta time string.)  Specifies the amount of time to wait for
     progress in full propagation dump transfers.  This is optional in
     configuration files, and is used by slave KDCs only.  The default

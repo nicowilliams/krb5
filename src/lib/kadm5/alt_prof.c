@@ -803,12 +803,12 @@ krb5_error_code kadm5_get_config_params(context, use_kdc_config,
                    KRB5_CONF_IPROP_PORT, 0);
 
     /* 5 min for large KDBs */
-    GET_DELTAT_PARAM(iprop_dump_tmout, KADM5_CONFIG_IPROP_DUMP_TMOUT,
-                     KRB5_CONF_IPROP_DUMP_TMOUT, 60 * 5);
+    GET_DELTAT_PARAM(iprop_dump_timeout, KADM5_CONFIG_IPROP_DUMP_TIMEOUT,
+                     KRB5_CONF_IPROP_DUMP_TIMEOUT, 60 * 5);
 
-    GET_DELTAT_PARAM(iprop_full_progress_tmout,
-                     KADM5_CONFIG_IPROP_FULL_PROGRESS_TMOUT,
-                     KRB5_CONF_IPROP_FULL_PROGRESS_TMOUT, 10); /* 10 secs */
+    GET_DELTAT_PARAM(iprop_full_progress_timeout,
+                     KADM5_CONFIG_IPROP_FULL_PROGRESS_TIMEOUT,
+                     KRB5_CONF_IPROP_FULL_PROGRESS_TIMEOUT, 10); /* 10 secs */
 
 
     hierarchy[2] = KRB5_CONF_IPROP_MASTER_ULOGSIZE;

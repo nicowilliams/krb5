@@ -544,6 +544,15 @@ void doit(int fd, int wfd)
                 temp_file_name);
         exit(1);
     }
+
+    /*
+     * XXX A possible performance improvement here might be to pipe the
+     * dump to kdb5_util load, either in addition to writing the dump
+     * file or instead of it.  This would effectively allow a load to
+     * happen concurrently with the transmission, though it would only
+     * pay off in cases where there's either enough CPU or where the
+     * network transmission latency is high.
+     */
     recv_database(kpropd_context, fd, database_fd, wfd, &confmsg);
     if (rename(temp_file_name, file)) {
         com_err(progname, errno, _("while renaming %s to %s"),

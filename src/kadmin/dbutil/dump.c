@@ -371,8 +371,7 @@ krb5_error_code master_key_convert(context, db_entry)
 }
 
 /* Create temp file for new dump to be named ofile */
-static
-FILE *
+static FILE *
 create_ofile(char *ofile, char **tmpname)
 {
     int fd = -1;
@@ -402,8 +401,7 @@ cleanup:
 }
 
 /* Rename new dump file into place */
-static
-void
+static void
 finish_ofile(char *ofile, char **tmpname)
 {
     if (rename(*tmpname, ofile) == -1) {
@@ -417,8 +415,7 @@ finish_ofile(char *ofile, char **tmpname)
 }
 
 /* Check that the {sno, timestamp} in an existing dump file is in the ulog */
-static
-int
+static int
 current_dump_sno_in_ulog(char *ifile, kdb_hlog_t *ulog)
 {
     FILE *f;

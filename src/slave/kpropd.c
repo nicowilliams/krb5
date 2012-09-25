@@ -154,9 +154,9 @@ char **db_args = NULL;
 int db_args_size = 0;
 
 struct fullprop_report {
-    int     prop_progress:1;
-    int     prop_complete:1;
-    int     load_complete:1;
+    int     prop_progress;
+    int     prop_complete;
+    int     load_complete;
     time_t  prop_time;
     int     status;
 };
@@ -463,8 +463,9 @@ do_standalone(int wfd)
 
                 report.prop_time = time(NULL);
                 bytes = write(wfd, &report, sizeof(report));
+                assert(bytes == -1 || bytes == 0 || bytes == sizeof(report));
                 if (bytes == -1 && errno == EPIPE)
-                    exit(0);
+                    exit(1);
             }
 
             if (runonce)

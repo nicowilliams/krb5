@@ -180,15 +180,13 @@ static void usage()
     exit(1);
 }
 
-static
-void
+static void
 alarm_handler(int sig)
 {
     /* Nothing to do, just catch the signal */
 }
 
-static
-void
+static void
 kill_do_standalone(int sig)
 {
     if (fullprop_child > 0)
@@ -198,8 +196,7 @@ kill_do_standalone(int sig)
     kill(getpid(), sig);
 }
 
-static
-void
+static void
 atexit_kill_do_standalone(void)
 {
     if (fullprop_child > 0)
@@ -351,8 +348,7 @@ get_wildcard_addr(struct addrinfo **res)
     return getaddrinfo(NULL, port, &hints, res);
 }
 
-static
-void
+static void
 do_standalone(int wfd)
 {
     struct  sockaddr_in     frominet;
@@ -636,8 +632,7 @@ full_resync(CLIENT *clnt)
  * Assumes POSIX semantics, specifically that small pipe I/Os are atomic
  * when the write() size matches the expected read size.
  */
-static
-int
+static int
 wait_for_fullprop(int fd, time_t start_time, int start_timeout,
                   int progress_timeout)
 {
@@ -719,8 +714,7 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
  * Returns -1 when EOF on rfd.
  */
 kadm5_config_params params;
-static
-krb5_error_code
+static krb5_error_code
 do_iprop(kdb_log_context *log_ctx, int rfd)
 {
     kadm5_ret_t retval;

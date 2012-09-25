@@ -448,13 +448,12 @@ do_standalone(int wfd)
 
             /* Report load completion to do_iprop() in parent process */
             if (wfd >= 0) {
-                ssize_t bytes;
-
                 report.prop_time = time(NULL);
-                bytes = write(wfd, &report, sizeof(report));
-                assert(bytes == -1 || bytes == 0 || bytes == sizeof(report));
-                if (bytes == -1 && errno == EPIPE)
+                if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
+                    com_err(progname, errno,
+                            "while reporting load completion");
                     exit(1);
+                }
             }
 
             if (runonce)
@@ -1604,8 +1603,8 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
         if (debug)
             fprintf(stderr, _("Full propagation transfer started.\n"));
         if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-            com_err(progname, retval, "while reporting progress");
-            send_error(context, fd, retval, "while reporting progress");
+            com_err(progname, errno, "while reporting progress");
+            send_error(context, fd, errno, "while reporting progress");
             exit(1);
         }
     }
@@ -1657,8 +1656,8 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
             if (debug > 1)
                 fprintf(stderr, _("Full propagation transfer progress.\n"));
             if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-                com_err(progname, retval, "while reporting progress");
-                send_error(context, fd, retval, "while reporting progress");
+                com_err(progname, errno, "while reporting progress");
+                send_error(context, fd, errno, "while reporting progress");
                 exit(1);
             }
         }
@@ -1679,8 +1678,8 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
         if (debug)
             fprintf(stderr, _("Full propagation transfer finished.\n"));
         if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-            com_err(progname, retval, "while reporting progress");
-            send_error(context, fd, retval, "while reporting progress");
+            com_err(progname, errno, "while reporting progress");
+            send_error(context, fd, errno, "while reporting progress");
             exit(1);
         }
     }

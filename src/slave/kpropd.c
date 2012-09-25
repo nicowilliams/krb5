@@ -1866,8 +1866,7 @@ load_database(context, kdb_util, database_file_name)
     }
 
     if (!WIFEXITED(waitb)) {
-        com_err(progname, 0, _("%s load terminated by %d"),
-                kdb_util, WTERMSIG(waitb));
+        com_err(progname, 0, _("%s load terminated"), kdb_util);
         exit(1);
     }
 

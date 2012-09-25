@@ -682,9 +682,10 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
         assert(bytes == -1 || bytes == 0 || bytes == sizeof(report));
         if (bytes == -1 && errno != EINTR) {
             syslog(LOG_ERR, "I/O error while reading status of full resync\n");
-            if (bytes == -1 && debug)
+            if (bytes == -1 && debug) {
                 fprintf(stderr, _("Could not read status of full resync: %s "
                         "(%d)\n"), strerror(errno), errno);
+            }
         }
         errno = save_errno;
         if (bytes <= 0) {
@@ -853,9 +854,10 @@ reinit:
                         "while attempting to connect"
                         " to master KDC ... retrying"));
             backoff_time = backoff_from_master(&reinit_cnt);
-            if (debug)
+            if (debug) {
                 fprintf(stderr, _("Sleeping %d seconds to re-initialize "
                                   "kadm5 (RPC ERROR)\n"), backoff_time);
+            }
             (void) sleep(backoff_time);
             goto reinit;
         } else {
@@ -872,10 +874,11 @@ reinit:
                     _("while initializing %s interface, retrying"),
                     progname);
             backoff_time = backoff_from_master(&reinit_cnt);
-            if (debug)
+            if (debug) {
                 fprintf(stderr, _("Sleeping %d seconds to re-initialize "
                                   "kadm5 (krb5kdc not running?)\n"),
                         backoff_time);
+            }
             sleep(backoff_time);
             goto reinit;
         }
@@ -926,9 +929,10 @@ reinit:
                 kadm5_destroy((void *)server_handle);
             server_handle = (void *)NULL;
             handle = (kadm5_iprop_handle_t)NULL;
-            if (debug)
+            if (debug) {
                 fprintf(stderr, _("Reinitializing iprop because get updates "
                                   "failed\n"));
+            }
             goto reinit;
         }
 
@@ -1028,9 +1032,10 @@ reinit:
             if (retval) {
                 const char *msg =
                     krb5_get_error_message(kpropd_context, retval);
-                if (debug)
+                if (debug) {
                     fprintf(stderr, _("ulog_replay failed (%s), updates not "
                                       "registered\n"), msg);
+                }
                 syslog(LOG_ERR, "ulog_replay failed (%s), updates "
                        "not registered.", msg);
                 krb5_free_error_message(kpropd_context, msg);

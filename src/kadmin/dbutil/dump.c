@@ -1477,9 +1477,6 @@ dump_db(argc, argv)
             finish_ofile(ofile, &tmpofile);
             update_ok_file(util_context, ok_fd);
         }
-        if (tmpofile != NULL)
-            unlink(tmpofile);
-        free(tmpofile);
         return;
     }
 

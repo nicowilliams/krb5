@@ -395,13 +395,26 @@ krb5int_clean_hostname(krb5_context context,
             if (ndots == 3)
                 return KRB5_ERR_NUMERIC_REALM;
         }
-        if (strchr(host, ':'))
-            /* IPv6 numeric address form?  Bye bye.  */
+        /*
+         * Some apps use hostname:port for their principals.  This is
+         * non-standard, but we need to support it.  We also want to
+         * reject host components that look like IPv6 addresses.  We
+         * settle for a weak heuristic: if there are multiple colons or
+         * if the one colon is followed by anything other than just
+         * decimal digits, then we assume this is an IPv6 addrss, else
+         * we ignore the :port.
+         */
+        cp = strrchr(host, ':');
+        if (cp != NULL && (cp != strchr(host, ':') ||
+            strspn(cp + 1, "0123456789") != strlen(cp + 1)))
             return KRB5_ERR_NUMERIC_REALM;
 
         /* Should probably error out if strlen(host) > MAXDNAME.  */
         strncpy(local_host, host, lhsize);
         local_host[lhsize - 1] = '\0';
+
+        if (cp)
+            *(strrchr(local_host, ':')) = '\0'; /* strip out :port */
     } else {
         retval = krb5int_get_fq_local_hostname (local_host, lhsize);
         if (retval)

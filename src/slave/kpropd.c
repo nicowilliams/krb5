@@ -189,6 +189,22 @@ static void usage()
     exit(1);
 }
 
+typedef void (*sig_handler_ft)(int sig);
+
+static void
+signal_wrapper(int sig, sig_handler_ft handler)
+{
+#ifdef POSIX_SIGNALS
+    struct sigaction s_action;
+    memset(&s_action, 0, sizeof(s_action));
+    sigemptyset(&s_action.sa_mask);
+    s_action.sa_handler = handler;
+    sigaction(sig, &s_action, NULL);
+#else
+    signal(sig, handler);
+#endif
+}
+
 static void
 alarm_handler(int sig)
 {
@@ -206,7 +222,7 @@ kill_do_standalone(int sig)
         kill(fullprop_child, sig);
     }
     /* Make sure our exit status code reflects our having been signaled */
-    signal(sig, SIG_DFL);
+    signal_wrapper(sig, SIG_DFL);
     kill(getpid(), sig);
 }
 
@@ -231,17 +247,7 @@ main(argc, argv)
 
     log_ctx = kpropd_context->kdblog_context;
 
-    {
-#ifdef POSIX_SIGNALS
-        struct sigaction s_action;
-        memset(&s_action, 0, sizeof(s_action));
-        sigemptyset(&s_action.sa_mask);
-        s_action.sa_handler = SIG_IGN;
-        sigaction(SIGPIPE, &s_action, NULL);
-#else
-        signal(SIGPIPE, SIG_IGN);
-#endif
-    }
+    signal_wrapper(SIGPIPE, SIG_IGN);
 
     /* "ready" is a sentinel for the test framework. */
     printf(_("ready\n"));
@@ -293,11 +299,11 @@ main(argc, argv)
     set_cloexec_fd(pipefds[0]);
     set_cloexec_fd(pipefds[1]);
 
-    signal(SIGHUP, kill_do_standalone);
-    signal(SIGINT, kill_do_standalone);
-    signal(SIGQUIT, kill_do_standalone);
-    signal(SIGTERM, kill_do_standalone);
-    signal(SIGSEGV, kill_do_standalone);
+    signal_wrapper(SIGHUP, kill_do_standalone);
+    signal_wrapper(SIGINT, kill_do_standalone);
+    signal_wrapper(SIGQUIT, kill_do_standalone);
+    signal_wrapper(SIGTERM, kill_do_standalone);
+    signal_wrapper(SIGSEGV, kill_do_standalone);
     atexit(atexit_kill_do_standalone);
     fullprop_child = fork();
     switch (fullprop_child) {
@@ -639,21 +645,7 @@ wait_for_fullprop(int fd, time_t start_time, int start_timeout,
      * Because we may have timed out earlier we may read
      * multiple reports that are of no interest.
      */
-    {
-#ifdef POSIX_SIGNALS
-        /*
-         * We really want SIGALRM handling to *not* restart read(2) on
-         * the rfd!
-         */
-        struct sigaction s_action;
-        memset(&s_action, 0, sizeof(s_action));
-        sigemptyset(&s_action.sa_mask);
-        s_action.sa_handler = alarm_handler;
-        sigaction(SIGALRM, &s_action, NULL);
-#else
-        signal(SIGALRM, alarm_handler);
-#endif
-    }
+    signal_wrapper(SIGALRM, alarm_handler);
     syslog(LOG_INFO, "kpropd: Waiting for report of full resync from "
            "child process.");
     if (debug) {

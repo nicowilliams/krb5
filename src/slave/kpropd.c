@@ -127,6 +127,8 @@ typedef struct _kadm5_iprop_handle_t {
 
 static char *kprop_version = KPROP_PROT_VERSION;
 
+static kadm5_config_params params;
+
 char    *progname;
 int     debug = 0;
 int     nodaemon = 0;
@@ -153,22 +155,14 @@ const char      *port = KPROP_SERVICE;
 char **db_args = NULL;
 int db_args_size = 0;
 
-struct fullprop_report {
-    int     prop_progress;
-    int     prop_complete;
-    int     load_complete;
-    time_t  prop_time;
-    int     status;
-};
-
 void    PRS(char**);
-static void     do_standalone(int wfd);
-void    doit(int, int);
-static krb5_error_code do_iprop(kdb_log_context *log_ctx, int rfd);
+static void     do_standalone();
+void    doit(int);
+static krb5_error_code do_iprop(kdb_log_context *log_ctx);
 void    kerberos_authenticate(krb5_context, int, krb5_principal *,
                               krb5_enctype *, struct sockaddr_storage *);
 krb5_boolean authorized_principal(krb5_context, krb5_principal, krb5_enctype);
-void    recv_database(krb5_context, int, int, int, krb5_data *);
+void    recv_database(krb5_context, int, int, krb5_data *);
 void    load_database(krb5_context, char *, char *);
 void    send_error(krb5_context, int, krb5_error_code, char *);
 void    recv_error(krb5_context, krb5_data *);
@@ -208,7 +202,9 @@ signal_wrapper(int sig, sig_handler_ft handler)
 static void
 alarm_handler(int sig)
 {
-    /* Nothing to do, just catch the signal */
+    static char *timeout_msg = "Full propagation timed out\n";
+    write(STDERR_FILENO, timeout_msg, strlen(timeout_msg));
+    exit(1);
 }
 
 static void
@@ -240,7 +236,6 @@ main(argc, argv)
 {
     krb5_error_code retval;
     kdb_log_context *log_ctx;
-    int pipefds[2];
 
     setlocale(LC_ALL, "");
     PRS(argv);
@@ -264,12 +259,12 @@ main(argc, argv)
             dup2(devnull, STDERR_FILENO);
             close(devnull);
         }
-        doit(0, -1);
+        doit(0);
         exit(0);
     }
 
     if (log_ctx == NULL || log_ctx->iproprole != IPROP_SLAVE) {
-        do_standalone(-1);
+        do_standalone();
         /* do_standalone() should never return */
         /* NOTREACHED */
         exit(1);
@@ -277,28 +272,13 @@ main(argc, argv)
 
     /*
      * This is the iprop case.  We'll fork a child to run do_standalone().
-     *
-     * The parent will run do_iprop().  do_standalone() will need a pipe
-     * to write {timestamp, wait status} for every prop received;
-     * do_iprop() will read these from the child whenever it needs to
-     * wait for a full resync.  See do_iprop().
+     * The parent will run do_iprop().  We try to kill the child if we
+     * get killed.
      *
      * The rest of this could be a loop so we can restart when the child
      * process dies.  But that might be pointless where there are good
      * restarters.
-     *
-     * We should try to kill the child if we get killed.  It's not
-     * enough to let the child die with SIGPIPE if we abandon it and it
-     * still receives a fullprop.  But again, with a decent external
-     * restarter we can avoid such complexity.
      */
-    if (pipe(pipefds) == -1) {
-        com_err(progname, errno, _("couldn't create a pipe.\n"));
-        exit(1);
-    }
-    set_cloexec_fd(pipefds[0]);
-    set_cloexec_fd(pipefds[1]);
-
     signal_wrapper(SIGHUP, kill_do_standalone);
     signal_wrapper(SIGINT, kill_do_standalone);
     signal_wrapper(SIGQUIT, kill_do_standalone);
@@ -311,12 +291,12 @@ main(argc, argv)
         com_err(progname, errno, _("do_iprop failed.\n"));
         break;
     case 0:
-        do_standalone(pipefds[1]);
+        do_standalone();
         /* do_standalone() should never return */
         /* NOTREACHED */
         break;
     default:
-        retval = do_iprop(log_ctx, pipefds[0]);
+        retval = do_iprop(log_ctx);
         kill(fullprop_child, SIGHUP);
         wait(NULL);
         if (retval)
@@ -349,20 +329,15 @@ get_wildcard_addr(struct addrinfo **res)
 }
 
 static void
-do_standalone(int wfd)
+do_standalone()
 {
     struct  sockaddr_in     frominet;
     struct addrinfo *res;
     int     finet, s;
     GETPEERNAME_ARG3_TYPE fromlen;
-    int ret, error, val;
-    /*
-     * Timer for accept/read calls, in case of network type errors.
-     */
-    struct fullprop_report report;
-
-    memset(&report, 0, sizeof(report));
-    report.load_complete = 1;
+    int ret, error, val, status;
+    pid_t child_pid;
+    pid_t wait_pid;
 
     error = get_wildcard_addr(&res);
     if (error != 0) {
@@ -398,9 +373,6 @@ do_standalone(int wfd)
         exit(1);
     }
     while (1) {
-        pid_t child_pid;
-        pid_t wait_pid;
-
         memset(&frominet, 0, sizeof(frominet));
         fromlen = sizeof(frominet);
         if (debug)
@@ -422,12 +394,12 @@ do_standalone(int wfd)
         case 0:
             (void) close(finet);
 
-            doit(s, wfd);
+            doit(s);
             close(s);
             _exit(0);
         default:
             do {
-                wait_pid = waitpid(child_pid, &report.status, 0);
+                wait_pid = waitpid(child_pid, &status, 0);
             } while (wait_pid == -1 && errno == EINTR);
             if (wait_pid == -1) {
                 /* Something bad happened; panic. */
@@ -446,16 +418,6 @@ do_standalone(int wfd)
 
             close(s);
 
-            /* Report load completion to do_iprop() in parent process */
-            if (wfd >= 0) {
-                report.prop_time = time(NULL);
-                if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-                    com_err(progname, errno,
-                            "while reporting load completion");
-                    exit(1);
-                }
-            }
-
             if (runonce)
                 break;
         }
@@ -463,7 +425,7 @@ do_standalone(int wfd)
     exit(0);
 }
 
-void doit(int fd, int wfd)
+void doit(int fd)
 {
     struct sockaddr_storage from;
     int on = 1;
@@ -476,6 +438,8 @@ void doit(int fd, int wfd)
     int database_fd;
     char host[INET6_ADDRSTRLEN+1];
 
+    signal_wrapper(SIGALRM, alarm_handler);
+    alarm(params.iprop_dump_timeout);
     fromlen = sizeof (from);
     if (getpeername(fd, (struct sockaddr *) &from, &fromlen) < 0) {
 #ifdef ENOTSOCK
@@ -546,7 +510,7 @@ void doit(int fd, int wfd)
                 temp_file_name);
         exit(1);
     }
-    recv_database(kpropd_context, fd, database_fd, wfd, &confmsg);
+    recv_database(kpropd_context, fd, database_fd, &confmsg);
     if (rename(temp_file_name, file)) {
         com_err(progname, errno, _("while renaming %s to %s"),
                 temp_file_name, file);
@@ -617,91 +581,13 @@ full_resync(CLIENT *clnt)
 }
 
 /*
- * Wait for a report of fullprop status via fd.
- *
- * Returns 1 on success.
- * Returns 0, errno = EINTR on timeout.
- * Returns 0, errno = 0 on failure of other types (e.g., kdb5_util load
- * failures).
- *
- * Assumes POSIX semantics, specifically that small pipe I/Os are atomic
- * when the write() size matches the expected read size.
- */
-static int
-wait_for_fullprop(int fd, time_t start_time, int start_timeout,
-                  int progress_timeout)
-{
-    struct fullprop_report report;
-    ssize_t bytes;
-    int save_errno;
-
-    /*
-     * Use alarm() for timeouts -- cheap, but it works.
-     *
-     * If we get EOF or any error other than EINTR from
-     * the pipe, however, we bail; main() can restart
-     * everything if desired.
-     *
-     * Because we may have timed out earlier we may read
-     * multiple reports that are of no interest.
-     */
-    signal_wrapper(SIGALRM, alarm_handler);
-    syslog(LOG_INFO, "kpropd: Waiting for report of full resync from "
-           "child process.");
-    if (debug) {
-        fprintf(stderr, _("Waiting for report of full resync from child "
-                          "process\n"));
-    }
-
-    alarm(start_timeout);
-    do {
-        memset(&report, 0, sizeof(report));
-        errno = 0;
-        bytes = read(fd, &report, sizeof(report));
-        save_errno = errno;
-        /* Assert: matched pipe I/Os this small are atomic */
-        assert(bytes == -1 || bytes == 0 || bytes == sizeof(report));
-        if (bytes == -1 && errno != EINTR) {
-            syslog(LOG_ERR, "I/O error while reading status of full resync\n");
-            if (bytes == -1 && debug) {
-                fprintf(stderr, _("Could not read status of full resync: %s "
-                        "(%d)\n"), strerror(errno), errno);
-            }
-        }
-        errno = save_errno;
-        if (bytes <= 0) {
-            if (debug)
-                fprintf(stderr, "Fullprop failed (IO error or child died)\n");
-            return 0;
-        }
-        if (report.prop_progress && !report.prop_complete &&
-            report.prop_time >= start_time)
-            alarm(progress_timeout); /* xfer started or making progress */
-    } while (!report.load_complete || report.prop_time < start_time);
-
-    alarm(0);
-    errno = 0;
-    if (!WIFEXITED(report.status) || WEXITSTATUS(report.status) != 0) {
-        if (debug)
-            fprintf(stderr, "Fullprop failed (load failed)\n");
-        return 0;
-    }
-
-    if (debug)
-        fprintf(stderr, _("Full resync succeeded\n"));
-    return 1;
-}
-
-/*
  * Beg for incrementals from the KDC.
  *
  * Returns 0 on success IFF runonce is true.
  * Returns > 0 on failure due to errors.
- * Returns -1 when EOF on rfd.
  */
-kadm5_config_params params;
 static krb5_error_code
-do_iprop(kdb_log_context *log_ctx, int rfd)
+do_iprop(kdb_log_context *log_ctx)
 {
     kadm5_ret_t retval;
     krb5_ccache cc;
@@ -712,12 +598,13 @@ do_iprop(kdb_log_context *log_ctx, int rfd)
     unsigned int pollin, backoff_time;
     int backoff_cnt = 0;
     int reinit_cnt = 0;
-    int frdone = 0;
-    time_t start_time = 0;
+    struct timeval iprop_start, iprop_end;
+    uint64_t us;
+    time_t frrequested = 0;
+    time_t now;
 
     kdb_incr_result_t *incr_ret;
     kdb_last_t mylast;
-    kdb_last_t master_last_full;
 
     kdb_fullresync_result_t *full_ret;
 
@@ -727,7 +614,6 @@ do_iprop(kdb_log_context *log_ctx, int rfd)
     if (debug)
         fprintf(stderr, _("Incremental propagation enabled\n"));
 
-    memset(&master_last_full, 0, sizeof(master_last_full));
     ulog = log_ctx->ulog;
 
     pollin = params.iprop_poll_time;
@@ -878,9 +764,6 @@ reinit:
     handle = server_handle;
 
     for (;;) {
-        int rvret;
-        struct timeval iprop_start, iprop_end;
-        uint64_t us;
 
         incr_ret = NULL;
         full_ret = NULL;
@@ -919,18 +802,22 @@ reinit:
         switch (incr_ret->ret) {
 
         case UPDATE_FULL_RESYNC_NEEDED:
+            /*
+             * If we're already asked for a full resync and we still
+             * need one and the last one hasn't timed out then just keep
+             * asking for updates as eventually the resync will finish
+             * (or, if it times out we'll just try again).  Note that
+             * doit() also applies a timeout to the full resync, thus
+             * it's OK for us to do the same here.
+             */
+            now = time(NULL);
+            if (frrequested && (now - frrequested) < params.iprop_dump_timeout)
+                break;
+            frrequested = now;
             if (debug)
                 fprintf(stderr, _("Full resync needed\n"));
             syslog(LOG_INFO, "kpropd: Full resync needed.");
-            /*
-             * We dont do bother with a full resync again if the last
-             * time the incr_ret->lastentry was the same as now.
-             */
-            if (frdone && !memcmp(&incr_ret->lastentry, &master_last_full,
-                                  sizeof(master_last_full)))
-                break;
 
-            start_time = time(NULL);
             full_ret = full_resync(handle->clnt);
             if (full_ret == (kdb_fullresync_result_t *)
                 NULL) {
@@ -950,12 +837,6 @@ reinit:
                     fprintf(stderr, _("Full resync request granted\n"));
                 syslog(LOG_INFO, "kpropd: Full resync request granted.");
                 backoff_cnt = 0;
-                rvret = wait_for_fullprop(rfd, start_time,
-                                          params.iprop_dump_timeout,
-                                          params.iprop_progress_timeout);
-                if (rvret == 0 && errno != 0)
-                    return errno; /* XXX Too eager to bail? */
-                frdone = (rvret > 0);
                 break;
 
             case UPDATE_BUSY:
@@ -982,7 +863,6 @@ reinit:
 
             default:
                 backoff_cnt = 0;
-                frdone = 0;
 
                 if (debug) {
                     fprintf(stderr,
@@ -996,7 +876,7 @@ reinit:
 
         case UPDATE_OK:
             backoff_cnt = 0;
-            frdone = 0;
+            frrequested = 0;
 
             /*
              * ulog_replay() will convert the ulog updates to db
@@ -1065,7 +945,7 @@ reinit:
                 fprintf(stderr, _("Master, slave KDC's "
                                   "are in-sync, no updates\n"));
             backoff_cnt = 0;
-            frdone = 0;
+            frrequested = 0;
             break;
 
         default:
@@ -1536,7 +1416,7 @@ authorized_principal(context, p, auth_etype)
 }
 
 void
-recv_database(krb5_context context, int fd, int database_fd, int wfd,
+recv_database(krb5_context context, int fd, int database_fd,
               krb5_data *confmsg)
 {
     krb5_ui_4       database_size; /* This must be 4 bytes */
@@ -1544,10 +1424,6 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
     char            buf[1024];
     krb5_data       inbuf, outbuf;
     krb5_error_code retval;
-    struct fullprop_report report;
-
-    memset(&report, 0, sizeof(report));
-    report.prop_progress = 1;
 
     /*
      * Receive and decode size from client
@@ -1586,17 +1462,8 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
         exit(1);
     }
 
-    /* Report dump completion to do_iprop() parent process */
-    report.prop_time = time(NULL);
-    if (wfd != -1) {
-        if (debug)
-            fprintf(stderr, _("Full propagation transfer started.\n"));
-        if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-            com_err(progname, errno, "while reporting progress");
-            send_error(context, fd, errno, "while reporting progress");
-            exit(1);
-        }
-    }
+    if (debug)
+        fprintf(stderr, _("Full propagation transfer started.\n"));
 
     /*
      * Now start receiving the database from the net
@@ -1641,15 +1508,6 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
         }
         received_size += outbuf.length;
         /* Report xfer progress to do_iprop() parent process */
-        if (wfd != -1) {
-            if (debug > 1)
-                fprintf(stderr, _("Full propagation transfer progress.\n"));
-            if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-                com_err(progname, errno, "while reporting progress");
-                send_error(context, fd, errno, "while reporting progress");
-                exit(1);
-            }
-        }
     }
     /*
      * OK, we've seen the entire file.  Did we get too many bytes?
@@ -1661,17 +1519,8 @@ recv_database(krb5_context context, int fd, int database_fd, int wfd,
         send_error(context, fd, KRB5KRB_ERR_GENERIC, buf);
     }
 
-    /* Report xfer completion to do_iprop() parent process */
-    if (wfd != -1) {
-        report.prop_complete = 1;
-        if (debug)
-            fprintf(stderr, _("Full propagation transfer finished.\n"));
-        if (write(wfd, &report, sizeof(report)) != sizeof(report)) {
-            com_err(progname, errno, "while reporting progress");
-            send_error(context, fd, errno, "while reporting progress");
-            exit(1);
-        }
-    }
+    if (debug)
+        fprintf(stderr, _("Full propagation transfer finished.\n"));
 
     /*
      * Create message acknowledging number of bytes received, but

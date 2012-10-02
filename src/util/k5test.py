@@ -97,7 +97,9 @@ keyword arguments:
     - port0 is used in the default krb5.conf for the KDC
     - port1 is used in the default krb5.conf for kadmind
     - port2 is used in the default krb5.conf for kpasswd
-    - port3 is the return value of realm.server_port()
+    - port3 is used in the default krb5.conf for kpropd
+    - port4 is used in the default krb5.conf for iprop (in kadmind)
+    - port5 is the return value of realm.server_port()
 
 * kdc_conf={...}: kdc.conf options, expressed as a nested dictionary,
   to be merged with the default kdc.conf settings.  The top level keys
@@ -851,6 +853,8 @@ class K5Realm(object):
         env['KRB5_KTNAME'] = self.keytab
         env['KRB5_CLIENT_KTNAME'] = self.client_keytab
         env['KRB5RCACHEDIR'] = self.testdir
+        env['KPROPD_PORT'] = str(self.portbase + 3)
+        env['KPROP_PORT'] = str(self.portbase + 3)
         return env
 
     def run_as_client(self, args, **keywords):
@@ -866,7 +870,7 @@ class K5Realm(object):
         return _run_cmd(args, self.env_slave, **keywords)
 
     def server_port(self):
-        return self.portbase + 3
+        return self.portbase + 4
 
     def start_server(self, args, sentinel):
         return _start_daemon(args, self.env_server, sentinel)
@@ -897,7 +901,7 @@ class K5Realm(object):
         assert(self._kadmind_proc is None)
         self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W',
                                             '-p', kdb5_util,
-                                            '-C', kprop,
+                                            '-K', kprop,
                                             '-F',
                                             os.path.join(self.testdir,
                                                     'master-dump')],
@@ -912,7 +916,7 @@ class K5Realm(object):
         global krb5kdc
         assert(self._kpropd_proc is None)
         self._kpropd_proc = _start_daemon([kpropd, '-D', '-P',
-                                           os.environ['KPROP_PORT'],
+                                           str(self.portbase + 3),
                                            '-f', os.path.join(self.testdir,
                                                'incoming-slave-datatrans'),
                                            '-p', kdb5_util, '-a',
@@ -1097,7 +1101,8 @@ _default_kdc_conf = {
     'all' : {
         'realms' : {
             '$realm' : {
-                'database_module' : 'foo_db2'
+                'database_module' : 'foo_db2',
+                'iprop_port' : '$port4'
             }
         },
         'dbmodules' : {

@@ -4,6 +4,7 @@
 kprop_port = '61010'
 import os
 os.environ['KPROP_PORT'] = kprop_port
+import time
 
 from k5test import *
 
@@ -40,7 +41,7 @@ realm.run_as_master([kdb5_util, 'dump', dumpfile])
 realm.run_as_slave([kdb5_util, 'load', dumpfile])
 realm.run_as_slave([kdb5_util, 'stash', '-P', 'master'])
 
-realm.run_as_slave(['/bin/sleep', '15'])
+time.sleep(15)
 
 # Make some changes to the master db.
 realm.addprinc('wakawaka')
@@ -83,7 +84,7 @@ if 'Last serial # : 8' not in output:
 # Sometimes we need to wait a long time because kpropd's do_iprop()
 # can race with kadmind and fail to kadm5 init, which leads -apparently-
 # to some backoff effect.
-realm.run_as_slave(['/bin/sleep', '35'])
+time.sleep(35)
 
 # Now check that iprop happened.  Note that we depend on timing here,
 # thus the above sleep, but there's no way to wait synchronously or force
@@ -100,7 +101,7 @@ if 'Last serial # : 9' not in output:
     fail('Update log on master has incorrect last serial number.')
 
 # Check that we're at sno 9 on the slave side too.
-realm.run_as_slave(['/bin/sleep', '35'])
+time.sleep(35)
 output = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : 9' not in output:
     fail('Update log on slave has incorrect last serial number.')
@@ -110,7 +111,7 @@ realm.run_as_slave([kproplog, '-R'])
 output = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : None' not in output:
     fail('Reset of update log on slave failed.')
-realm.run_as_slave(['/bin/sleep', '35'])
+time.sleep(35)
 # Check that a full resync happened.
 output = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : 9' not in output:
@@ -122,7 +123,7 @@ output = realm.run_as_master([kproplog, '-h'])
 if 'Last serial # : 10' not in output:
     fail('Update log on master has incorrect last serial number.')
 
-realm.run_as_slave(['/bin/sleep', '35'])
+time.sleep(35)
 output = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : 10' not in output:
     fail('Update log on slave has incorrect last serial number.')
@@ -138,7 +139,7 @@ realm.run_kadminl('modprinc -allow_tix w')
 output = realm.run_as_master([kproplog, '-h'])
 if 'Last serial # : 1' not in output:
     fail('Update log on master has incorrect last serial number.')
-realm.run_as_slave(['/bin/sleep', '35'])
+time.sleep(35)
 # Check that a full resync happened.
 output = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : 1' not in output:

@@ -14,7 +14,7 @@ SYNOPSIS
 [**-port** *port-number*]
 [**-P** *pid_file*]
 [**-p** *kdb5_util_path*]
-[**-C** *kprop_path*]
+[**-K** *kprop_path*]
 [**-F** *dump_file*]
 
 DESCRIPTION
@@ -89,7 +89,7 @@ OPTIONS
     specifies the path to the kdb5_util command to use when dumping the
     KDB in response to full resync requests when iprop is enabled.
 
-**-C** *kprop_path*
+**-K** *kprop_path*
     specifies the path to the kprop command to use to send full dumps
     to slaves in response to full resync requests.
 

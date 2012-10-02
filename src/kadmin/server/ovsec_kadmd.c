@@ -109,7 +109,7 @@ static void usage()
     fprintf(stderr, _("Usage: kadmind [-x db_args]* [-r realm] [-m] [-nofork] "
                       "[-port port-number]\n"
                       "\t\t[-p path-to-kdb5_util] [-F dump-file]\n"
-                      "\t\t[-C path-to-kprop] [-P pid_file]\n"
+                      "\t\t[-K path-to-kprop] [-P pid_file]\n"
                       "\nwhere,\n\t[-x db_args]* - any number of database "
                       "specific arguments.\n"
                       "\t\t\tLook at each database documentation for "
@@ -314,7 +314,7 @@ int main(int argc, char *argv[])
             if (!argc)
                 usage();
             dump_file = *argv;
-        } else if (strcmp(*argv, "-C") == 0) {
+        } else if (strcmp(*argv, "-K") == 0) {
             argc--; argv++;
             if (!argc)
                 usage();

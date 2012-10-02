@@ -439,7 +439,7 @@ void doit(int fd)
     char host[INET6_ADDRSTRLEN+1];
 
     signal_wrapper(SIGALRM, alarm_handler);
-    alarm(params.iprop_dump_timeout);
+    alarm(params.iprop_resync_timeout);
     fromlen = sizeof (from);
     if (getpeername(fd, (struct sockaddr *) &from, &fromlen) < 0) {
 #ifdef ENOTSOCK
@@ -811,7 +811,8 @@ reinit:
              * it's OK for us to do the same here.
              */
             now = time(NULL);
-            if (frrequested && (now - frrequested) < params.iprop_dump_timeout)
+            if (frrequested &&
+                (now - frrequested) < params.iprop_resync_timeout)
                 break;
             frrequested = now;
             if (debug)

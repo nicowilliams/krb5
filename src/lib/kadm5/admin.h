@@ -164,8 +164,7 @@ typedef long            kadm5_ret_t;
 #define KADM5_CONFIG_IPROP_LOGFILE      0x08000000
 #define KADM5_CONFIG_IPROP_PORT         0x10000000
 #define KADM5_CONFIG_KVNO               0x20000000
-#define KADM5_CONFIG_IPROP_DUMP_TIMEOUT   0x40000000
-#define KADM5_CONFIG_IPROP_PROGRESS_TIMEOUT   0x80000000
+#define KADM5_CONFIG_IPROP_RESYNC_TIMEOUT   0x40000000
 /*
  * permission bits
  */
@@ -276,7 +275,7 @@ typedef struct _kadm5_config_params {
     char *              iprop_logfile;
 /*    char *            iprop_server;*/
     int                 iprop_port;
-    int                 iprop_dump_timeout;
+    int                 iprop_resync_timeout;
     int                 iprop_progress_timeout;
 } kadm5_config_params;
 

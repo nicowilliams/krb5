@@ -900,7 +900,7 @@ class K5Realm(object):
         assert(self._kadmind_proc is None)
         self._kadmind_proc = _start_daemon([kadmind, '-nofork', '-W',
                                             '-p', kdb5_util,
-                                            '-C', kprop,
+                                            '-K', kprop,
                                             '-F',
                                             os.path.join(self.testdir,
                                                     'master-dump')],

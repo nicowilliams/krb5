@@ -682,6 +682,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 
     if ((caller == FKPROPLOG) || (caller == FKPROPD)) {
         /* kproplog and kpropd don't need to do anything else. */
+        ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
         return (0);
     }
 

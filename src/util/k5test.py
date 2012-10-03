@@ -915,7 +915,7 @@ class K5Realm(object):
         global krb5kdc
         assert(self._kpropd_proc is None)
         self._kpropd_proc = _start_daemon([kpropd, '-D', '-P',
-                                           self.portbase + 3,
+                                           str(self.portbase + 3),
                                            '-f', os.path.join(self.testdir,
                                                'incoming-slave-datatrans'),
                                            '-p', kdb5_util, '-a',

@@ -854,6 +854,7 @@ class K5Realm(object):
         env['KRB5_CLIENT_KTNAME'] = self.client_keytab
         env['KRB5RCACHEDIR'] = self.testdir
         env['KPROPD_PORT'] = str(self.portbase + 3)
+        env['KPROP_PORT'] = str(self.portbase + 3)
         return env
 
     def run_as_client(self, args, **keywords):

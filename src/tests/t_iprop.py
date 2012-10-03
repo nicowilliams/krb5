@@ -1,9 +1,6 @@
 #!/usr/bin/python
 
-# XXX comment here
-kprop_port = '61010'
 import os
-os.environ['KPROP_PORT'] = kprop_port
 import time
 
 from k5test import *

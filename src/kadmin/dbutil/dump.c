@@ -2686,7 +2686,7 @@ load_db(argc, argv)
             if (log_ctx && log_ctx->iproprole) {
                 load = &iprop_version;
                 add_update = FALSE;
-                caller = FKPROPD;
+                caller = FKLOAD;
             } else {
                 fprintf(stderr, _("Iprop not enabled\n"));
                 exit_status++;

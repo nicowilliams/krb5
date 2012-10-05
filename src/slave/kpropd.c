@@ -183,10 +183,10 @@ static void usage()
     exit(1);
 }
 
-typedef void (*sig_handler_ft)(int sig);
+typedef void (*sig_handler_fn)(int sig);
 
 static void
-signal_wrapper(int sig, sig_handler_ft handler)
+signal_wrapper(int sig, sig_handler_fn handler)
 {
 #ifdef POSIX_SIGNALS
     struct sigaction s_action;
@@ -236,6 +236,7 @@ main(argc, argv)
 {
     krb5_error_code retval;
     kdb_log_context *log_ctx;
+    int devnull, sock;
 
     setlocale(LC_ALL, "");
     PRS(argv);
@@ -244,40 +245,50 @@ main(argc, argv)
 
     signal_wrapper(SIGPIPE, SIG_IGN);
 
-    /* "ready" is a sentinel for the test framework. */
-    printf(_("ready\n"));
-    fflush(stdout);
-    if (!debug && !nodaemon)
-        daemon(0, 0);
-
-    if (!standalone) {
-        int devnull;
-
-        /* We're an inetd nowait service. */
-        devnull = open("/dev/null", O_RDWR);
-        if (devnull != -1) {
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
+    if (standalone) {
+        /* "ready" is a sentinel for the test framework. */
+        if (!debug && !nodaemon) {
+            daemon(0, 0);
+        } else {
+            printf(_("ready\n"));
+            fflush(stdout);
         }
-        doit(0);
+    } else {
+        /*
+         * We're an inetd nowait service.  Let's not risk anything
+         * read/write from/to the inetd socket unintentionally.
+         */
+        devnull = open("/dev/null", O_RDWR);
+        if (devnull == -1) {
+            syslog(LOG_ERR, _("Could not open /dev/null: %s"),
+                   strerror(errno));
+            exit(1);
+        }
+
+        sock = dup(0);
+        if (sock == -1) {
+            syslog(LOG_ERR, _("Could not dup the inetd socket: %s"),
+                   strerror(errno));
+        }
+
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
+        doit(sock);
         exit(0);
     }
 
     if (log_ctx == NULL || log_ctx->iproprole != IPROP_SLAVE) {
         do_standalone();
         /* do_standalone() should never return */
-        /* NOTREACHED */
-        exit(1);
+	assert(0);
     }
 
     /*
      * This is the iprop case.  We'll fork a child to run do_standalone().
      * The parent will run do_iprop().  We try to kill the child if we
      * get killed.
-     *
-     * The rest of this could be a loop so we can restart when the child
-     * process dies.  But that might be pointless where there are good
-     * restarters.
      */
     signal_wrapper(SIGHUP, kill_do_standalone);
     signal_wrapper(SIGINT, kill_do_standalone);
@@ -297,13 +308,13 @@ main(argc, argv)
         break;
     default:
         retval = do_iprop(log_ctx);
+        /* do_iprop() can return due to failures and runonce. */
         kill(fullprop_child, SIGHUP);
         wait(NULL);
         if (retval)
             com_err(progname, retval, _("do_iprop failed.\n"));
         else
             exit(0);
-        /* do_iprop() can return due to failures and runonce. */
     }
 
     exit(1);
@@ -584,7 +595,7 @@ full_resync(CLIENT *clnt)
  * Beg for incrementals from the KDC.
  *
  * Returns 0 on success IFF runonce is true.
- * Returns > 0 on failure due to errors.
+ * Returns non-zero on failure due to errors.
  */
 static krb5_error_code
 do_iprop(kdb_log_context *log_ctx)
@@ -817,7 +828,7 @@ reinit:
             frrequested = now;
             if (debug)
                 fprintf(stderr, _("Full resync needed\n"));
-            syslog(LOG_INFO, "kpropd: Full resync needed.");
+            syslog(LOG_INFO, _("kpropd: Full resync needed."));
 
             full_ret = full_resync(handle->clnt);
             if (full_ret == (kdb_fullresync_result_t *)
@@ -836,7 +847,7 @@ reinit:
             case UPDATE_OK:
                 if (debug)
                     fprintf(stderr, _("Full resync request granted\n"));
-                syslog(LOG_INFO, "kpropd: Full resync request granted.");
+                syslog(LOG_INFO, _("kpropd: Full resync request granted."));
                 backoff_cnt = 0;
                 break;
 
@@ -852,14 +863,14 @@ reinit:
             case UPDATE_PERM_DENIED:
                 if (debug)
                     fprintf(stderr, _("Full resync permission denied\n"));
-                syslog(LOG_ERR, "kpropd: Full resync, permission denied.");
+                syslog(LOG_ERR, _("kpropd: Full resync, permission denied."));
                 goto error;
 
             case UPDATE_ERROR:
                 if (debug)
                     fprintf(stderr, _("Full resync error from master\n"));
-                syslog(LOG_ERR, "kpropd: Full resync, "
-                       "error returned from master KDC.");
+                syslog(LOG_ERR, _("kpropd: Full resync, "
+                       "error returned from master KDC."));
                 goto error;
 
             default:
@@ -897,8 +908,8 @@ reinit:
                     fprintf(stderr, _("ulog_replay failed (%s), updates not "
                                       "registered\n"), msg);
                 }
-                syslog(LOG_ERR, "ulog_replay failed (%s), updates "
-                       "not registered.", msg);
+                syslog(LOG_ERR, _("ulog_replay failed (%s), updates "
+                       "not registered."), msg);
                 krb5_free_error_message(kpropd_context, msg);
                 break;
             }
@@ -906,7 +917,7 @@ reinit:
             gettimeofday(&iprop_end, NULL);
             us = (iprop_end.tv_sec * 1000000 + iprop_end.tv_usec) -
                 (iprop_start.tv_sec * 1000000 + iprop_start.tv_usec);
-            syslog(LOG_INFO, "Incremental updates: %d updates / %llu us",
+            syslog(LOG_INFO, _("Incremental updates: %d updates / %llu us"),
                    incr_ret->updates.kdb_ulog_t_len, us);
 
             if (debug) {
@@ -919,7 +930,7 @@ reinit:
         case UPDATE_PERM_DENIED:
             if (debug)
                 fprintf(stderr, _("get_updates permission denied\n"));
-            syslog(LOG_ERR, "kpropd: get_updates, permission denied.");
+            syslog(LOG_ERR, _("kpropd: get_updates, permission denied."));
             goto error;
 
         case UPDATE_ERROR:
@@ -953,8 +964,8 @@ reinit:
             backoff_cnt = 0;
             if (debug)
                 fprintf(stderr, _("get_updates invalid result from master\n"));
-            syslog(LOG_ERR,
-                   "kpropd: get_updates, invalid return from master KDC.");
+            syslog(LOG_ERR, _("kpropd: get_updates, invalid return "
+                   "from master KDC."));
             break;
         }
 
@@ -1620,7 +1631,7 @@ load_database(context, kdb_util, database_file_name)
     char *database_file_name;
 {
     static char     *edit_av[10];
-    int     error_ret, save_stderr = -1;
+    int     error_ret;
     int     child_pid;
     int     count;
 
@@ -1664,30 +1675,8 @@ load_database(context, kdb_util, database_file_name)
         com_err(progname, errno, _("while trying to fork %s"), kdb_util);
         exit(1);
     case 0:
-        if (!debug) {
-            int devnull;
-
-            devnull = open("/dev/null", O_RDWR);
-            if (devnull == -1) {
-                perror("opening /dev/null");
-                exit(1);
-            }
-            save_stderr = dup(STDERR_FILENO);
-            dup2(devnull, STDIN_FILENO);
-            /* Allow [debug] output to be seen if it can be. */
-            if (!standalone) {
-                dup2(devnull, STDOUT_FILENO);
-                dup2(devnull, STDERR_FILENO);
-            }
-        }
-
         execv(kdb_util, edit_av);
-        retval = errno;
-        if (standalone) {
-            /* No sense printing anything in inetd nowait service mode. */
-            dup2(save_stderr, STDERR_FILENO);
-            com_err(progname, retval, _("while trying to exec %s"), kdb_util);
-        }
+        com_err(progname, errno, _("while trying to exec %s"), kdb_util);
         _exit(1);
         /*NOTREACHED*/
     default:

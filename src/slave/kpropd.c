@@ -147,6 +147,8 @@ char    *temp_file_name;
 char    *kdb5_util = KPROPD_DEFAULT_KDB5_UTIL;
 char    *kerb_database = NULL;
 char    *acl_file_name = KPROPD_ACL_FILE;
+char    *test_pipe = NULL;
+int     test_pipe_fd = -1;
 
 krb5_address    *sender_addr;
 krb5_address    *receiver_addr;
@@ -241,6 +243,19 @@ main(argc, argv)
 
     setlocale(LC_ALL, "");
     PRS(argv);
+
+    /*
+     * For testing we write status notifications to a FIFO.  The test
+     * framework will not create the FIFO -the test itself is
+     * responsible for this- so we ignore ENOENT here.
+     */
+    if (test_pipe != NULL && *test_pipe) {
+        test_pipe_fd = open(test_pipe, O_WRONLY);
+        if (test_pipe_fd == -1 && errno != ENOENT) {
+            com_err(progname, errno, _("while opening the test FIFO"));
+            exit(1);
+        }
+    }
 
     if (fstat(0, &st) == -1) {
         com_err(progname, errno, _("while checking if stdin is a socket"));
@@ -821,6 +836,10 @@ reinit:
             goto reinit;
         }
 
+        if (test_pipe_fd && incr_ret->ret != UPDATE_NIL &&
+            incr_ret->ret != UPDATE_FULL_RESYNC_NEEDED)
+            write(test_pipe_fd, "o", 1);
+
         switch (incr_ret->ret) {
 
         case UPDATE_FULL_RESYNC_NEEDED:
@@ -912,6 +931,8 @@ reinit:
             }
             retval = ulog_replay(kpropd_context, incr_ret,
                                  db_args);
+            if (test_pipe_fd != -1)
+                write(test_pipe_fd, "i", 1);
             if (retval) {
                 const char *msg =
                     krb5_get_error_message(kpropd_context, retval);
@@ -1155,6 +1176,12 @@ void PRS(argv)
                     break;
                 case 'd':
                     debug++;
+                    break;
+                case 'X':
+                    if (*word)
+                        test_pipe = word;
+                    else
+                        test_pipe = *argv++;
                     break;
                 case 'S':
                     /* Standalone mode is now auto-detected; see main(). */
@@ -1656,7 +1683,6 @@ load_database(context, kdb_util, database_file_name)
 #else
     int     waitb;
 #endif
-    krb5_error_code retval;
     kdb_log_context *log_ctx;
 
     if (debug)
@@ -1700,16 +1726,22 @@ load_database(context, kdb_util, database_file_name)
     }
 
     if (!WIFEXITED(waitb)) {
+        if (test_pipe_fd != -1)
+            write(test_pipe_fd, "e", 1);
         com_err(progname, 0, _("%s load terminated"), kdb_util);
         exit(1);
     }
 
     error_ret = WEXITSTATUS(waitb);
     if (error_ret) {
+        if (test_pipe_fd != -1)
+            write(test_pipe_fd, "e", 1);
         com_err(progname, 0, _("%s returned a bad exit status (%d)"),
                 kdb_util, error_ret);
         exit(1);
     }
+    if (test_pipe_fd != -1)
+        write(test_pipe_fd, "r", 1);
 }
 
 /*

@@ -913,12 +913,14 @@ class K5Realm(object):
     def start_kpropd(self):
         global krb5kdc
         assert(self._kpropd_proc is None)
+        fifo = os.path.join(self.testdir, 'fifo')
         slavedump_path = os.path.join(self.testdir, 'incoming-slave-datatrans')
         kpropdacl_path = os.path.join(self.testdir, 'kpropd-acl')
         self._kpropd_proc = _start_daemon([kpropd, '-D', '-P',
                                            str(self.portbase + 3),
                                            '-f', slavedump_path,
                                            '-p', kdb5_util,
+                                           '-X', fifo,
                                            '-a', kpropdacl_path],
                                           self.env_slave, 'ready')
 

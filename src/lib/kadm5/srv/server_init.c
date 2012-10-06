@@ -332,6 +332,16 @@ kadm5_ret_t kadm5_init(krb5_context context, char *client_name, char *pass,
         return ret;
     }
 
+    ret = kadm5_init_iprop(handle, db_args);
+    if (ret) {
+        k5_kadm5_hook_free_handles(context, handle->hook_handles);
+        krb5_db_fini(handle->context);
+        krb5_free_principal(handle->context, handle->current_caller);
+        free_db_args(handle);
+        free(handle);
+        return ret;
+    }
+
     *server_handle = (void *) handle;
 
     return KADM5_OK;
@@ -429,6 +439,8 @@ kadm5_init_iprop(void *handle, char **db_args)
     krb5_error_code retval;
 
     iprop_h = handle;
+    if (iprop_h->context->kdblog_context->ulog)
+        return 0;
     if (iprop_h->params.iprop_enabled) {
         ulog_set_role(iprop_h->context, IPROP_MASTER);
         if ((retval = ulog_map(iprop_h->context,

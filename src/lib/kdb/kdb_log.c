@@ -112,7 +112,8 @@ ulog_sync_header(kdb_hlog_t *ulog)
  * the need for resizing should be very small.
  */
 static krb5_error_code
-ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
+ulog_resize(kdb_hlog_t *ulog, size_t current_size, uint32_t ulogentries,
+            int ulogfd, uint_t recsize)
 {
     uint_t              new_block, new_size;
 
@@ -126,24 +127,18 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
 
     new_size += ulogentries * new_block;
 
+    if (new_size <= current_size)
+        return (0);
+
     if (new_size <= MAXLOGLEN) {
-        /*
-         * Reinit log with new block size
-         */
-        (void) memset(ulog, 0, sizeof (kdb_hlog_t));
-
-        ulog->kdb_hmagic = KDB_ULOG_HDR_MAGIC;
-        ulog->db_version_num = KDB_VERSION;
-        ulog->kdb_state = KDB_STABLE;
-        ulog->kdb_block = new_block;
-
-        ulog_sync_header(ulog);
-
         /*
          * Time to expand log considering new block size
          */
         if (extend_file_to(ulogfd, new_size) < 0)
             return errno;
+
+        ulog->kdb_block = new_block;
+        ulog_sync_header(ulog);
     } else {
         /*
          * Can't map into file larger than MAXLOGLEN
@@ -561,7 +556,9 @@ ulog_reset(kdb_hlog_t *ulog)
  *
  *  - FKPROPD
  *
- *    Create and initialize if need be, map as MAP_SHARED.
+ *    Create and initialize if need be, map as MAP_SHARED, mark slave
+ *    status in ulog so that writes to replicated attributes can be
+ *    rejected.
  *
  *  - FKLOAD
  *
@@ -588,106 +585,117 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 {
     struct stat st;
     krb5_error_code     retval;
-    uint32_t    ulog_filesize;
-    kdb_log_context     *log_ctx;
+    size_t    mapped_size = 0;
+    size_t    ulog_sz;
+    kdb_log_context     *log_ctx = context->kdblog_context;
     kdb_hlog_t  *ulog = NULL;
     int         ulogfd = -1;
 
-    ulog_filesize = sizeof (kdb_hlog_t);
+    /*
+     * If context->kdblog_context != NULL, did we get called again?  And is
+     * that something we want to allow?  And if so, do we want to clean
+     * anything up in context->kdblog_context?  Surely we would...  Not that
+     * this can happen today, but, when we have kadm5_init() init iprop then
+     * kpropd will cause us to com down this path, and we could leak VM
+     * space...  But, really, we should just return success.
+     */
+    if (log_ctx != NULL && log_ctx->ulog != NULL && log_ctx->ulogfd > -1)
+        return (0);
 
     if (stat(logname, &st) == -1) {
-
-        if (caller == FKPROPLOG) {
-            /*
-             * File doesn't exist so we exit with kproplog
-             */
+        if (caller == FKPROPLOG)
             return (errno);
-        }
-
         ulogfd = open(logname, O_RDWR | O_CREAT, 0600);
-        if (ulogfd == -1) {
-            return (errno);
-        }
-
-        if (lseek(ulogfd, 0L, SEEK_CUR) == -1) {
-            return (errno);
-        }
-
-        if ((caller == FKADMIND) || (caller == FKCOMMAND))
-            ulog_filesize += ulogentries * ULOG_BLOCK;
-
-        if (extend_file_to(ulogfd, ulog_filesize) < 0)
-            return errno;
     } else {
-
         ulogfd = open(logname, O_RDWR, 0600);
-        if (ulogfd == -1)
-            /*
-             * Can't open existing log file
-             */
-            return errno;
     }
-
-    if (caller == FKPROPLOG) {
-        if (fstat(ulogfd, &st) < 0) {
-            close(ulogfd);
-            return errno;
-        }
-        ulog_filesize = st.st_size;
-
-        ulog = (kdb_hlog_t *)mmap(0, ulog_filesize,
-                                  PROT_READ+PROT_WRITE, MAP_PRIVATE, ulogfd, 0);
-    } else {
-        /*
-         * else kadmind, kpropd, & kcommands should udpate stores
-         */
-        ulog = (kdb_hlog_t *)mmap(0, MAXLOGLEN,
-                                  PROT_READ+PROT_WRITE, MAP_SHARED, ulogfd, 0);
-    }
-
-    if (ulog == MAP_FAILED) {
-        /*
-         * Can't map update log file to memory
-         */
-        close(ulogfd);
+    if (ulogfd == -1)
         return (errno);
+    if (extend_file_to(ulogfd, sizeof (*ulog)) < 0) {
+        retval = errno;
+        goto error;
     }
 
-    if (!context->kdblog_context) {
-        if (!(log_ctx = malloc(sizeof (kdb_log_context))))
-            return (errno);
-        memset(log_ctx, 0, sizeof(*log_ctx));
-        context->kdblog_context = log_ctx;
-    } else
-        log_ctx = context->kdblog_context;
+    if (log_ctx == NULL) {
+        if (!(log_ctx = calloc(1, sizeof (kdb_log_context)))) {
+            retval = ENOMEM;
+            goto error;
+        }
+    }
+    context->kdblog_context = log_ctx;
     log_ctx->ulog = ulog;
     log_ctx->ulogentries = ulogentries;
     log_ctx->ulogfd = ulogfd;
-
     retval = ulog_lock(context, KRB5_LOCKMODE_EXCLUSIVE);
     if (retval)
-        return retval;
+        goto error;
 
-    if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC && ulog->kdb_hmagic != 0) {
-        ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-        return (KRB5_LOG_CORRUPT);
+    /* We need the size after obtaining the lock. */
+    if (fstat(ulogfd, &st) == -1) {
+        retval = errno;
+        goto error;
     }
 
-    if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC || caller == FKLOAD) {
+    /* Map only the header for now until we've resized the file if need be. */
+    ulog = mmap(0, sizeof (*ulog), PROT_READ | PROT_WRITE, MAP_SHARED,
+                ulogfd, 0);
+    if (ulog == MAP_FAILED) {
+        retval = errno;
+        goto error;
+    }
+    mapped_size = sizeof (*ulog);
+
+    if (caller == FKLOAD) {
         ulog_reset(ulog);
-        if (caller != FKPROPLOG)
-            ulog_sync_header(ulog);
+        ulog_sync_header(ulog);
         ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
         return (0);
     }
 
-    if ((caller == FKPROPLOG) || (caller == FKPROPD)) {
-        /* kproplog and kpropd don't need to do anything else. */
+    if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC &&
+        ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
+        retval = KRB5_LOG_CORRUPT;
+        goto error;
+    }
+
+    if (caller == FKPROPLOG) {
         ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
         return (0);
     }
 
-    if (caller == FKADMIND) {
+    if (caller == FKPROPD) {
+        /*
+         * We're on a slave KDC... because we're running kpropd on it.  Note
+         * this in the ulog so that we can disallow updates of replicated
+         * attributes.
+         */
+        ulog->kdb_hmagic = KDB_ULOG_HDR_SLAVE_MAGIC;
+        ulog_sync_header(ulog);
+        ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
+        return (0);
+    }
+
+    /*
+     * Size the ulog.
+     *
+     * ulogentries is a minimum.  To truncate use kproplog -R.
+     */
+    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) > st.st_size) {
+        ulog_reset(ulog);
+        ulog_sync_header(ulog);
+    }
+    if (ulog->kdb_num > ulogentries)
+        ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
+
+    ulog_sz = sizeof (*ulog) + ulogentries * ulog->kdb_block;
+    if (st.st_size < ulog_sz && extend_file_to(ulogfd, ulog_sz) < 0) {
+        retval = errno;
+        goto error;
+    }
+
+    log_ctx->ulogentries = ulogentries;
+
+    if (caller == FKADMIND && ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
         switch (ulog->kdb_state) {
         case KDB_STABLE:
         case KDB_UNSTABLE:
@@ -712,10 +720,16 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     }
     assert(caller == FKADMIND || caller == FKCOMMAND);
 
-    /*
-     * Reinit ulog if the log is being truncated or expanded after
-     * we have circled.
-     */
+    munmap(ulog, sizeof (*ulog));
+    ulog = mmap(0, ulog_sz, PROT_READ | PROT_WRITE,
+                (caller == KPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
+    if (ulog == MAP_FAILED) {
+        retval = errno;
+        goto error;
+    }
+
+    log_ctx->ulogentries = ulogentries;
+
     if (ulog->kdb_num != ulogentries) {
         if ((ulog->kdb_num != 0) &&
             ((ulog->kdb_last_sno > ulog->kdb_num) ||
@@ -729,9 +743,9 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
          * Expand ulog if we have specified a greater size
          */
         if (ulog->kdb_num < ulogentries) {
-            ulog_filesize += ulogentries * ulog->kdb_block;
+            ulog_sz += ulogentries * ulog->kdb_block;
 
-            if (extend_file_to(ulogfd, ulog_filesize) < 0) {
+            if (extend_file_to(ulogfd, ulog_sz) < 0) {
                 ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
                 return errno;
             }
@@ -740,6 +754,12 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
 
     return (0);
+
+error:
+    if (ulog != NULL)
+        munmap(ulog, mapped_size);
+    ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
+    return retval;
 }
 
 /*

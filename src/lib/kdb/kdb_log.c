@@ -548,6 +548,11 @@ ulog_reset(kdb_hlog_t *ulog)
  * Assumes that the caller will terminate on ulog_map, hence munmap and
  * closing of the fd are implicitly performed by the caller.
  *
+ * The ulogentries argument is a suggested size.  If ulog_map() is called
+ * again (for the same context) after having succeeded once, then it will be a
+ * no-op.  Else ulogentries will be taken as a minimum (not maximum) and the
+ * ulog will be resized if need be.
+ *
  * Semantics for various values of caller:
  *
  *  - FKPROPLOG
@@ -590,6 +595,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     kdb_log_context     *log_ctx = context->kdblog_context;
     kdb_hlog_t  *ulog = NULL;
     int         ulogfd = -1;
+    int         locked = 0;
 
     /*
      * If context->kdblog_context != NULL, did we get called again?  And is
@@ -629,6 +635,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     retval = ulog_lock(context, KRB5_LOCKMODE_EXCLUSIVE);
     if (retval)
         goto error;
+    locked = 1;
 
     /* We need the size after obtaining the lock. */
     if (fstat(ulogfd, &st) == -1) {
@@ -675,12 +682,17 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         return (0);
     }
 
+
     /*
-     * Size the ulog.
+     * Resize the ulog if need be.
      *
-     * ulogentries is a minimum.  To truncate use kproplog -R.
+     * We take ulogentries is a minimum.  To truncate use kproplog -R to reset
+     * the ulog.
      */
-    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) > st.st_size) {
+    assert(caller == FKADMIND || caller == FKCOMMAND);
+    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) > st.st_size ||
+        ulog->kdb_last_sno > ulog->kdb_num) {
+        /* XXX Corruption? */
         ulog_reset(ulog);
         ulog_sync_header(ulog);
     }
@@ -689,6 +701,15 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 
     ulog_sz = sizeof (*ulog) + ulogentries * ulog->kdb_block;
     if (st.st_size < ulog_sz && extend_file_to(ulogfd, ulog_sz) < 0) {
+        retval = errno;
+        goto error;
+    }
+
+    /* Re-mmap the ulog now that it's sized properly. */
+    munmap(ulog, sizeof (*ulog));
+    ulog = mmap(0, ulog_sz, PROT_READ | PROT_WRITE,
+                (caller == KPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
+    if (ulog == MAP_FAILED) {
         retval = errno;
         goto error;
     }
@@ -718,47 +739,22 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
             return (KRB5_LOG_ERROR);
         }
     }
-    assert(caller == FKADMIND || caller == FKCOMMAND);
 
-    munmap(ulog, sizeof (*ulog));
-    ulog = mmap(0, ulog_sz, PROT_READ | PROT_WRITE,
-                (caller == KPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
-    if (ulog == MAP_FAILED) {
-        retval = errno;
-        goto error;
-    }
-
-    log_ctx->ulogentries = ulogentries;
-
-    if (ulog->kdb_num != ulogentries) {
-        if ((ulog->kdb_num != 0) &&
-            ((ulog->kdb_last_sno > ulog->kdb_num) ||
-             (ulog->kdb_num > ulogentries))) {
-
-            ulog_reset(ulog);
-            ulog_sync_header(ulog);
-        }
-
-        /*
-         * Expand ulog if we have specified a greater size
-         */
-        if (ulog->kdb_num < ulogentries) {
-            ulog_sz += ulogentries * ulog->kdb_block;
-
-            if (extend_file_to(ulogfd, ulog_sz) < 0) {
-                ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-                return errno;
-            }
-        }
-    }
     ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-
     return (0);
 
 error:
-    if (ulog != NULL)
+    if (locked)
+        ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
+    if (ulog != NULL) {
+        if (log_ctx->ulog == ulog)
+            log_ctx->ulog = NULL;
         munmap(ulog, mapped_size);
-    ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
+    }
+    if (ulogfd != -1)
+        close(ulogfd);
+    if (log_ctx != context->kdblog_context)
+        free(log_ctx);
     return retval;
 }
 

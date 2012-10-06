@@ -16,6 +16,14 @@ def wait_for_prop(realm, full_expected):
             fail('kpropd process exited unexpectedly')
         output('kpropd: ' + line)
 
+        if 'load process for full propagation completed' in line:
+            output('*** Full prop complete\n')
+            full_seen = True
+            # kpropd's child process has finished a DB load; make the parent
+            # do another iprop request.  This will be unnecessary if kpropd
+            # is simplified to use a single process.
+            realm.prod_kpropd()
+
         if 'KDC is synchronized' in line or 'Incremental updates:' in line:
             output('*** Sync complete\n')
             if full_expected and not full_seen:
@@ -25,6 +33,7 @@ def wait_for_prop(realm, full_expected):
             return
 
         if 'load process for full propagation completed' in line:
+            output('*** Full prop complete\n')
             full_seen = True
             # kpropd's child process has finished a DB load; make the parent
             # do another iprop request.  This will be unnecessary if kpropd

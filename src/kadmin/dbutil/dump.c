@@ -2668,7 +2668,6 @@ load_db(argc, argv)
     flags = 0;
     crflags = KRB5_KDB_CREATE_BTREE;
     exit_status = 0;
-    log_ctx = util_context->kdblog_context;
 
     for (aindex = 1; aindex < argc; aindex++) {
         if (!strcmp(argv[aindex], oldoption))
@@ -2684,7 +2683,9 @@ load_db(argc, argv)
         else if (!strcmp(argv[aindex], r18option))
             load = &r1_8_version;
         else if (!strcmp(argv[aindex], ipropoption)) {
-            if (log_ctx && log_ctx->iproprole) {
+            /* We must be a slave, if we're loading */
+            ulog_set_role(util_context, IPROP_SLAVE);
+            if (global_params.iprop_enabled) {
                 load = &iprop_version;
                 add_update = FALSE;
                 caller = FKLOAD;
@@ -2728,6 +2729,7 @@ load_db(argc, argv)
         return;
     }
 
+    log_ctx = util_context->kdblog_context;
     if (log_ctx && log_ctx->iproprole)
         kcontext->kdblog_context = log_ctx;
 

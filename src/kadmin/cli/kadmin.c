@@ -533,12 +533,6 @@ kadmin_startup(int argc, char *argv[])
         exit(1);
     }
 
-    retval = kadm5_init_iprop(handle, 0);
-    if (retval) {
-        com_err(whoami, retval, _("while mapping update log"));
-        exit(1);
-    }
-
     return query;
 }
 

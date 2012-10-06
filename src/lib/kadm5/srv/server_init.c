@@ -332,6 +332,22 @@ kadm5_ret_t kadm5_init(krb5_context context, char *client_name, char *pass,
         return ret;
     }
 
+    /* Initialize iprop */
+    if (handle->params.iprop_enabled) {
+        ulog_set_role(handle->context, IPROP_MASTER);
+        ret = ulog_map(handle->context, handle->params.iprop_logfile,
+                       handle->params.iprop_ulogsize, ULOG_MAP_ENTRIES,
+                       db_args);
+        if (ret) {
+            k5_kadm5_hook_free_handles(context, handle->hook_handles);
+            krb5_db_fini(handle->context);
+            krb5_free_principal(handle->context, handle->current_caller);
+            free_db_args(handle);
+            free(handle);
+            return ret;
+        }
+    }
+
     *server_handle = (void *) handle;
 
     return KADM5_OK;
@@ -425,17 +441,5 @@ krb5_error_code kadm5_init_krb5_context (krb5_context *ctx)
 krb5_error_code
 kadm5_init_iprop(void *handle, char **db_args)
 {
-    kadm5_server_handle_t iprop_h;
-    krb5_error_code retval;
-
-    iprop_h = handle;
-    if (iprop_h->params.iprop_enabled) {
-        ulog_set_role(iprop_h->context, IPROP_MASTER);
-        if ((retval = ulog_map(iprop_h->context,
-                               iprop_h->params.iprop_logfile,
-                               iprop_h->params.iprop_ulogsize,
-                               FKCOMMAND, db_args)) != 0)
-            return (retval);
-    }
-    return (0);
+    return 0;
 }

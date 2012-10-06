@@ -161,7 +161,6 @@ void kdb5_create(argc, argv)
     unsigned int pw_size = 0;
     int do_stash = 0;
     krb5_data pwd, seed;
-    kdb_log_context *log_ctx;
     krb5_kvno mkey_kvno;
     int strong_random = 1;
 
@@ -193,8 +192,6 @@ void kdb5_create(argc, argv)
     rblock.flags = global_params.flags;
     rblock.nkslist = global_params.num_keysalts;
     rblock.kslist = global_params.keysalts;
-
-    log_ctx = util_context->kdblog_context;
 
     printf(_("Loading random data\n"));
     retval = krb5_c_random_os_entropy (util_context, strong_random, NULL);
@@ -288,34 +285,6 @@ void kdb5_create(argc, argv)
 /*      exit_status++; return; */
 /*     } */
 
-    if (log_ctx && log_ctx->iproprole) {
-        if ((retval = ulog_map(util_context, global_params.iprop_logfile,
-                               global_params.iprop_ulogsize, FKCOMMAND,
-                               db5util_db_args))) {
-            com_err(argv[0], retval, _("while creating update log"));
-            exit_status++;
-            return;
-        }
-
-        /*
-         * We're reinitializing the update log in case one already
-         * existed, but this should never happen.
-         */
-        (void) memset(log_ctx->ulog, 0, sizeof (kdb_hlog_t));
-
-        log_ctx->ulog->kdb_hmagic = KDB_ULOG_HDR_MAGIC;
-        log_ctx->ulog->db_version_num = KDB_VERSION;
-        log_ctx->ulog->kdb_state = KDB_STABLE;
-        log_ctx->ulog->kdb_block = ULOG_BLOCK;
-
-        /*
-         * Since we're creating a new db we shouldn't worry about
-         * adding the initial principals since any slave might as well
-         * do full resyncs from this newly created db.
-         */
-        log_ctx->iproprole = IPROP_NULL;
-    }
-
     if ((retval = add_principal(util_context, master_princ, MASTER_KEY, &rblock)) ||
         (retval = add_principal(util_context, &tgt_princ, TGT_KEY, &rblock))) {
         (void) krb5_db_fini(util_context);
@@ -360,6 +329,7 @@ void kdb5_create(argc, argv)
     }
     free(master_salt.data);
 
+    global_params.iprop_enabled = FALSE;
     if (kadm5_create(&global_params)) {
         if (!do_stash) unlink(global_params.stash_file);
         exit_status++;

@@ -197,10 +197,12 @@ alarm_handler(int sig)
     exit(1);
 }
 
+#define usr1_msg "Received SIGUSR1 prod\n"
 static void
 usr1_handler(int sig)
 {
     /* Nothing to do, just let the signal interrupt sleep(). */
+    write(STDERR_FILENO, usr1_msg, strlen(usr1_msg));
 }
 
 static void
@@ -806,6 +808,8 @@ reinit:
             fprintf(stderr, _("Calling iprop_get_updates_1()\n"));
         gettimeofday(&iprop_start, NULL);
         incr_ret = iprop_get_updates_1(&mylast, handle->clnt);
+        if (debug)
+            fprintf(stderr, _("iprop_get_updates_1() returned\n"));
         if (incr_ret == (kdb_incr_result_t *)NULL) {
             clnt_perror(handle->clnt,
                         _("iprop_get_updates call failed"));
@@ -834,6 +838,8 @@ reinit:
             now = time(NULL);
             if (frrequested &&
                 (now - frrequested) < params.iprop_resync_timeout) {
+                if (debug)
+                    fprintf(stderr, _("Still waiting for full resync\n"));
                 break;
             } else {
                 frrequested = now;

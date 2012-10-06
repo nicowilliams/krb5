@@ -891,20 +891,24 @@ krb5_db_put_principal(krb5_context kcontext, krb5_db_entry *entry)
     if (status)
         goto clean_n_exit;
 
-    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER)) {
+    /*
+     * It's possible to have log_ctx->iproprole == IPROP_MASTER but the
+     * ulog not opened.  This happens in the kdb5_util create and load
+     * cases since there's no point in logging the updates then do.
+     */
+    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER) &&
+        log_ctx->ulogfd > -1) {
         upd = k5alloc(sizeof(*upd), &status);
         if (upd == NULL)
             goto clean_n_exit;
         if ((status = ulog_conv_2logentry(kcontext, entry, upd)))
             goto clean_n_exit;
-    }
 
-    status = ulog_lock(kcontext, KRB5_LOCKMODE_EXCLUSIVE);
-    if (status != 0)
-        goto err_lock;
-    ulog_locked = 1;
+        status = ulog_lock(kcontext, KRB5_LOCKMODE_EXCLUSIVE);
+        if (status != 0)
+            goto err_lock;
+        ulog_locked = 1;
 
-    if (upd != NULL) {
         status = krb5_unparse_name(kcontext, entry->princ, &princ_name);
         if (status != 0)
             goto err_lock;

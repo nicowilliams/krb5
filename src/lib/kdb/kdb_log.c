@@ -43,6 +43,7 @@ typedef unsigned long ulong_t;
 typedef unsigned int uint_t;
 
 static int extend_file_to(int fd, uint_t new_size);
+static void ulog_reset(kdb_hlog_t *);
 
 krb5_error_code
 ulog_lock(krb5_context ctx, int mode)
@@ -112,23 +113,32 @@ ulog_sync_header(kdb_hlog_t *ulog)
  * the need for resizing should be very small.
  */
 static krb5_error_code
-ulog_resize(kdb_hlog_t *ulog, size_t current_size, uint32_t ulogentries,
-            int ulogfd, uint_t recsize)
+ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
 {
-    uint_t              new_block, new_size;
+    int64_t             new_block, new_size;
+    struct stat         st;
 
-    if (ulog == NULL)
-        return (KRB5_LOG_ERROR);
+    assert(ulog != NULL);
 
     new_size = sizeof (kdb_hlog_t);
 
     new_block = (recsize / ULOG_BLOCK) + 1;
     new_block *= ULOG_BLOCK;
+    if (new_block < recsize)
+        return EOVERFLOW;
 
     new_size += ulogentries * new_block;
+    if (new_size < 0 || (new_size / new_block) != ulogentries)
+        return EOVERFLOW;
 
-    if (new_size <= current_size)
+    if (fstat(ulogfd, &st) == -1)
+        return errno;
+
+    if (new_size <= st.st_size) {
+        if ((st.st_size / new_block) < ulogentries)
+            return EOVERFLOW;
         return (0);
+    }
 
     if (new_size <= MAXLOGLEN) {
         /*
@@ -137,6 +147,7 @@ ulog_resize(kdb_hlog_t *ulog, size_t current_size, uint32_t ulogentries,
         if (extend_file_to(ulogfd, new_size) < 0)
             return errno;
 
+        ulog_reset(ulog);
         ulog->kdb_block = new_block;
         ulog_sync_header(ulog);
     } else {
@@ -591,7 +602,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     struct stat st;
     krb5_error_code     retval;
     size_t    mapped_size = 0;
-    size_t    ulog_sz;
     kdb_log_context     *log_ctx = context->kdblog_context;
     kdb_hlog_t  *ulog = NULL;
     int         ulogfd = -1;
@@ -688,6 +698,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      *
      * We take ulogentries is a minimum.  To truncate use kproplog -R to reset
      * the ulog.
+     *
+     * XXX Check for overflow in left-hand side of comparison below!
      */
     assert(caller == FKADMIND || caller == FKCOMMAND);
     if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) > st.st_size ||
@@ -699,16 +711,19 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     if (ulog->kdb_num > ulogentries)
         ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
 
-    ulog_sz = sizeof (*ulog) + ulogentries * ulog->kdb_block;
-    if (st.st_size < ulog_sz && extend_file_to(ulogfd, ulog_sz) < 0) {
+    /* Resize if need be and re-mmap() */
+    retval = ulog_resize(ulog, ulogentries, ulogfd, ulog->kdb_block);
+    if (retval)
+        goto error;
+
+    if (fstat(ulogfd, &st) == -1) {
         retval = errno;
         goto error;
     }
 
-    /* Re-mmap the ulog now that it's sized properly. */
     munmap(ulog, sizeof (*ulog));
-    ulog = mmap(0, ulog_sz, PROT_READ | PROT_WRITE,
-                (caller == KPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
+    ulog = mmap(0, st.st_size, PROT_READ | PROT_WRITE,
+                (caller == FKPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
     if (ulog == MAP_FAILED) {
         retval = errno;
         goto error;

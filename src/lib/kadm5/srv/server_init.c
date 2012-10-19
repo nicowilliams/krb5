@@ -439,7 +439,8 @@ kadm5_init_iprop(void *handle, char **db_args)
     krb5_error_code retval;
 
     iprop_h = handle;
-    if (iprop_h->context->kdblog_context->ulog)
+    if (iprop_h->context->kdblog_context != NULL && 
+        iprop_h->context->kdblog_context->ulog != NULL)
         return 0;
     if (iprop_h->params.iprop_enabled) {
         ulog_set_role(iprop_h->context, IPROP_MASTER);

@@ -158,12 +158,11 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
     if (st.st_size > SSIZE_MAX)
         return EINVAL;         /* XXX Need a better error... */
 
-    if (new_size <= (size_t)st.st_size) {
+    if (new_size < (size_t)st.st_size) {
         if ((st.st_size / new_block) < ulogentries)
             return ERANGE;
         if (ulog->kdb_block == new_block)
             return 0;
-        ulog_reset(ulog);
         ulog->kdb_block = new_block;
         ulog_sync_header(ulog);
         return (0);
@@ -176,7 +175,6 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
         if (extend_file_to(ulogfd, new_size) < 0)
             return errno;
 
-        ulog_reset(ulog);
         ulog->kdb_block = new_block;
         ulog_sync_header(ulog);
     } else {

@@ -49,13 +49,13 @@ krb5_error_code
 ulog_lock(krb5_context ctx, int mode)
 {
     kdb_log_context *log_ctx = NULL;
-    kdb_hlog_t *ulog = NULL;
 
     if (ctx == NULL)
         return KRB5_LOG_ERROR;
     if (ctx->kdblog_context == NULL || ctx->kdblog_context->iproprole == IPROP_NULL)
         return 0;
-    INIT_ULOG(ctx);
+    log_ctx = ctx->kdblog_context;
+    assert(log_ctx != NULL);
     return krb5_lock_file(ctx, log_ctx->ulogfd, mode);
 }
 
@@ -115,28 +115,57 @@ ulog_sync_header(kdb_hlog_t *ulog)
 static krb5_error_code
 ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
 {
-    int64_t             new_block, new_size;
+    size_t              new_block, new_size;
     struct stat         st;
 
     assert(ulog != NULL);
 
-    new_size = sizeof (kdb_hlog_t);
-
+    /*
+     * We want to do some overflow checking.  There's no OFF_MAX, so we use
+     * SSIZE_MAX since a) mmap() takes a size_t for the length, b) we need to
+     * check against a signed max because off_t is signed, c) off_t can be
+     * wider than size_t/ssize_t, but is extremely unlikely to be narrower than
+     * them.
+     */
     new_block = (recsize / ULOG_BLOCK) + 1;
-    new_block *= ULOG_BLOCK;
-    if (new_block < recsize)
-        return EOVERFLOW;
 
-    new_size += ulogentries * new_block;
-    if (new_size < 0 || (new_size / new_block) != ulogentries)
-        return EOVERFLOW;
+    if ((SSIZE_MAX / ULOG_BLOCK) < new_block)
+        return ERANGE;
+    new_block *= ULOG_BLOCK;
+
+    if ((SSIZE_MAX / ulogentries) < new_block) {
+        syslog(LOG_ERR, _("ulog_resize: using %d ulog entries instead of "
+                          "requested (%d)"), DEF_ULOGENTRIES, ulogentries);
+        ulogentries = DEF_ULOGENTRIES;
+        ulog_reset(ulog);
+    }
+    if ((SSIZE_MAX / ulogentries) < new_block)
+        return ERANGE;
+    new_size = ulogentries * new_block;
+
+    if (SSIZE_MAX - new_size < sizeof(kdb_hlog_t))
+        return ERANGE;
+    new_size += sizeof(kdb_hlog_t);
 
     if (fstat(ulogfd, &st) == -1)
         return errno;
 
-    if (new_size <= st.st_size) {
+    /*
+     * Check that we're not accidentally clobbering a ulog by running a 32-bit
+     * libkadm5srv app against too large a ulog on a system where 64-bit
+     * libkadm5srv apps are meant to run only.
+     */
+    if (st.st_size > SSIZE_MAX)
+        return EINVAL;         /* XXX Need a better error... */
+
+    if (new_size <= (size_t)st.st_size) {
         if ((st.st_size / new_block) < ulogentries)
-            return EOVERFLOW;
+            return ERANGE;
+        if (ulog->kdb_block == new_block)
+            return 0;
+        ulog_reset(ulog);
+        ulog->kdb_block = new_block;
+        ulog_sync_header(ulog);
         return (0);
     }
 
@@ -606,6 +635,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     kdb_hlog_t  *ulog = NULL;
     int         ulogfd = -1;
     int         locked = 0;
+    krb5_boolean        do_reset = FALSE;
 
     /*
      * If context->kdblog_context != NULL, did we get called again?  And is
@@ -622,15 +652,12 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         if (caller == FKPROPLOG)
             return (errno);
         ulogfd = open(logname, O_RDWR | O_CREAT, 0600);
+        do_reset = TRUE;
     } else {
         ulogfd = open(logname, O_RDWR, 0600);
     }
     if (ulogfd == -1)
         return (errno);
-    if (extend_file_to(ulogfd, sizeof (*ulog)) < 0) {
-        retval = errno;
-        goto error;
-    }
 
     if (log_ctx == NULL) {
         if (!(log_ctx = calloc(1, sizeof (kdb_log_context)))) {
@@ -653,6 +680,14 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         goto error;
     }
 
+    do_reset = do_reset || (st.st_size == 0);
+
+    if (extend_file_to(ulogfd, sizeof (*ulog)) < 0) {
+        retval = errno;
+        goto error;
+    }
+    st.st_size = (st.st_size > sizeof (*ulog)) ? st.st_size : sizeof (*ulog);
+
     /* Map only the header for now until we've resized the file if need be. */
     ulog = mmap(0, sizeof (*ulog), PROT_READ | PROT_WRITE, MAP_SHARED,
                 ulogfd, 0);
@@ -661,6 +696,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         goto error;
     }
     mapped_size = sizeof (*ulog);
+    log_ctx->ulog = ulog;
 
     if (caller == FKLOAD) {
         ulog_reset(ulog);
@@ -668,6 +704,9 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
         return (0);
     }
+
+    if (do_reset)
+        ulog_reset(ulog);
 
     if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC &&
         ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
@@ -702,7 +741,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      * XXX Check for overflow in left-hand side of comparison below!
      */
     assert(caller == FKADMIND || caller == FKCOMMAND);
-    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) > st.st_size ||
+    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
+        (size_t)st.st_size ||
         ulog->kdb_last_sno > ulog->kdb_num) {
         /* XXX Corruption? */
         ulog_reset(ulog);
@@ -730,6 +770,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     }
 
     log_ctx->ulogentries = ulogentries;
+    log_ctx->ulog = ulog;
 
     if (caller == FKADMIND && ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
         switch (ulog->kdb_state) {
@@ -959,6 +1000,7 @@ static int extend_file_to(int fd, uint_t new_size)
     current_offset = lseek(fd, 0, SEEK_END);
     if (current_offset < 0)
         return -1;
+    /* XXX INT_MAX?! */
     if (new_size > INT_MAX) {
         errno = EINVAL;
         return -1;

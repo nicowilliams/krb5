@@ -67,8 +67,7 @@ iprop_kdc_conf = {
                 }}}
 }
 
-realm = K5Realm(kdc_conf=iprop_kdc_conf, create_user=False, start_kadmind=False)
-realm.start_kadmind()
+realm = K5Realm(kdc_conf=iprop_kdc_conf, create_user=False, start_kadmind=True)
 
 ulog = os.path.join(realm.testdir, 'db.ulog')
 if not os.path.exists(ulog):

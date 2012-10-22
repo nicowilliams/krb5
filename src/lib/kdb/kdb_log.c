@@ -978,6 +978,7 @@ ulog_set_role(krb5_context ctx, iprop_role role)
         if (!(log_ctx = malloc(sizeof (kdb_log_context))))
             return (errno);
         memset(log_ctx, 0, sizeof(*log_ctx));
+        log_ctx->ulogfd = -1;
         ctx->kdblog_context = log_ctx;
     } else
         log_ctx = ctx->kdblog_context;

@@ -127,7 +127,9 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
      * wider than size_t/ssize_t, but is extremely unlikely to be narrower than
      * them.
      */
-    new_block = (recsize / ULOG_BLOCK) + 1;
+    new_block = recsize / ULOG_BLOCK;
+    if (recsize % ULOG_BLOCK)
+        new_block++;           /* this is safe, since we divided recsize */
 
     if ((SSIZE_MAX / ULOG_BLOCK) < new_block)
         return ERANGE;
@@ -161,8 +163,6 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
     if (new_size < (size_t)st.st_size) {
         if ((st.st_size / new_block) < ulogentries)
             return ERANGE;
-        if (ulog->kdb_block == new_block)
-            return 0;
         ulog->kdb_block = new_block;
         ulog_sync_header(ulog);
         return (0);
@@ -746,7 +746,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         ulog_reset(ulog);
         ulog_sync_header(ulog);
     }
-    if (ulog->kdb_num > ulogentries)
+    if (ulogentries == 0 || ulog->kdb_num > ulogentries)
         ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
 
     /* Resize if need be and re-mmap() */

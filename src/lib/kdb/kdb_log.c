@@ -628,7 +628,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 {
     struct stat st;
     krb5_error_code     retval;
-    size_t    mapped_size = 0;
     kdb_log_context     *log_ctx = context->kdblog_context;
     kdb_hlog_t  *ulog = NULL;
     int         ulogfd = -1;
@@ -636,15 +635,24 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     krb5_boolean        do_reset = FALSE;
 
     /*
-     * If context->kdblog_context != NULL, did we get called again?  And is
-     * that something we want to allow?  And if so, do we want to clean
-     * anything up in context->kdblog_context?  Surely we would...  Not that
-     * this can happen today, but, when we have kadm5_init() init iprop then
-     * kpropd will cause us to com down this path, and we could leak VM
-     * space...  But, really, we should just return success.
+     * If context->kdblog_context != NULL... we got called again.  This may be
+     * a no-op.
+     *
+     * We can have ulog_map() called twice in some cases.  It's just twice, but
+     * still, we don't want to leak, so we clean up after the previous one.
      */
-    if (log_ctx != NULL && log_ctx->ulog != NULL && log_ctx->ulogfd > -1)
+    if (log_ctx != NULL && log_ctx->ulog != NULL && log_ctx->ulogfd > -1 &&
+        log_ctx->map_type == caller)
         return (0);
+    if (log_ctx->ulogfd > -1) {
+        close(log_ctx->ulogfd);
+        log_ctx->ulogfd = -1;
+    }
+    if (log_ctx->ulog != NULL) {
+        munmap(log_ctx->ulog, log_ctx->map_size);
+        log_ctx->ulog = NULL;
+        log_ctx->map_size = 0;
+    }
 
     if (stat(logname, &st) == -1) {
         if (caller == FKPROPLOG)
@@ -693,9 +701,13 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         retval = errno;
         goto error;
     }
-    mapped_size = sizeof (*ulog);
+    log_ctx->map_size = sizeof (*ulog);
     log_ctx->ulog = ulog;
 
+    /*
+     * We've mapped only the header at this point, and that may be enough for
+     * some callers.
+     */
     if (caller == FKLOAD) {
         ulog_reset(ulog);
         ulog_sync_header(ulog);
@@ -731,10 +743,13 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 
 
     /*
-     * Resize the ulog if need be.
+     * Resize the ulog if need be, then re-mmap() it, this time the whole file.
      *
-     * We take ulogentries is a minimum.  To truncate use kproplog -R to reset
-     * the ulog.
+     * We take ulogentries as a minimum, but to avoid truncating the ulog
+     * (which would require resetting the ulog, else we might corrupt its
+     * state) we compute the actual ulogentries from the file size -- you can't
+     * truncate the ulog by reducing the size in the config file.  To truncate
+     * use kproplog -R to reset the ulog.
      *
      * XXX Check for overflow in left-hand side of comparison below!
      */
@@ -760,6 +775,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     }
 
     munmap(ulog, sizeof (*ulog));
+    log_ctx->ulog = NULL;
+    log_ctx->map_size = 0;
     ulog = mmap(0, st.st_size, PROT_READ | PROT_WRITE,
                 (caller == FKPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
     if (ulog == MAP_FAILED) {
@@ -769,6 +786,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 
     log_ctx->ulogentries = ulogentries;
     log_ctx->ulog = ulog;
+    log_ctx->map_size = st.st_size;
 
     if (caller == FKADMIND && ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
         switch (ulog->kdb_state) {
@@ -803,7 +821,7 @@ error:
     if (ulog != NULL) {
         if (log_ctx->ulog == ulog)
             log_ctx->ulog = NULL;
-        munmap(ulog, mapped_size);
+        munmap(ulog, log_ctx->map_size);
     }
     if (ulogfd != -1)
         close(ulogfd);

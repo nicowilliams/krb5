@@ -641,17 +641,20 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      * We can have ulog_map() called twice in some cases.  It's just twice, but
      * still, we don't want to leak, so we clean up after the previous one.
      */
-    if (log_ctx != NULL && log_ctx->ulog != NULL && log_ctx->ulogfd > -1 &&
-        log_ctx->map_type == caller)
-        return (0);
-    if (log_ctx->ulogfd > -1) {
-        close(log_ctx->ulogfd);
-        log_ctx->ulogfd = -1;
-    }
-    if (log_ctx->ulog != NULL) {
-        munmap(log_ctx->ulog, log_ctx->map_size);
-        log_ctx->ulog = NULL;
-        log_ctx->map_size = 0;
+    if (log_ctx != NULL) {
+        if (log_ctx->ulog != NULL && log_ctx->ulogfd > -1 &&
+            log_ctx->map_type == caller)
+            return (0);
+        if (log_ctx->ulogfd > -1) {
+            close(log_ctx->ulogfd);
+            log_ctx->ulogfd = -1;
+        }
+        if (log_ctx->ulog != NULL) {
+            munmap(log_ctx->ulog, log_ctx->map_size);
+            log_ctx->ulog = NULL;
+            log_ctx->map_size = 0;
+        }
+        log_ctx->map_type = 0;
     }
 
     if (stat(logname, &st) == -1) {

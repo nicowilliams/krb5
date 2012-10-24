@@ -636,6 +636,9 @@ ulog_reset(kdb_hlog_t *ulog)
  * Returns 0 on success else failure.
  */
 krb5_error_code
+ulog_remap(krb5_context context, const char *logname, uint32_t ulogentries,
+           int caller, char **db_args)
+krb5_error_code
 ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
          int caller, char **db_args)
 {
@@ -777,11 +780,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         ulog_reset(ulog);
         ulog_sync_header(ulog);
     }
-    /* XXX Move this into ulog_resize()? */
-    if (ulogentries == 0 || ulog->kdb_num > ulogentries)
-        ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
 
-    /* Resize if need be and re-mmap() */
+    /* Resize if need be and... */
     retval = ulog_resize(log_ctx, ulogentries, ulog->kdb_block);
     if (retval)
         goto error;
@@ -791,6 +791,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         goto error;
     }
 
+    /* ...re-mmap() */
     munmap(ulog, sizeof (*ulog));
     log_ctx->ulog = NULL;
     log_ctx->map_size = 0;

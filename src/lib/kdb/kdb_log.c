@@ -110,15 +110,26 @@ ulog_sync_header(kdb_hlog_t *ulog)
  * Resizes the array elements.  We reinitialize the update log rather than
  * unrolling the the log and copying it over to a temporary log for obvious
  * performance reasons.  Slaves will subsequently do a full resync, but
- * the need for resizing should be very small.
+ * the need for resizing should be very small.  Note that the requested
+ * ulogentries count is an optional suggestion (from the configuration),
+ * while recsize is a requirement.
+ *
+ * Returns 0 on success.
+ * Returns EFBIG, ERANGE, or any errno that fstat(2) returns on failure.
  */
 static krb5_error_code
-ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
+ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
 {
     size_t              new_block, new_size;
     struct stat         st;
+    uint32_t            orig_ulogentries = ulogentries;
+    krb5_boolean        do_reset = FALSE;
+    kdb_hlog_t          *ulog = log_ctx->ulog;
 
     assert(ulog != NULL);
+
+    if (ulogentries == 0 || ulog->kdb_num > ulogentries)
+        ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
 
     /*
      * We want to do some overflow checking.  There's no OFF_MAX, so we use
@@ -132,24 +143,32 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
         new_block++;           /* this is safe, since we divided recsize */
 
     if ((SSIZE_MAX / ULOG_BLOCK) < new_block)
-        return ERANGE;
+        goto erange;
     new_block *= ULOG_BLOCK;
 
-    if ((SSIZE_MAX / ulogentries) < new_block) {
-        syslog(LOG_ERR, _("ulog_resize: using %d ulog entries instead of "
-                          "requested (%d)"), DEF_ULOGENTRIES, ulogentries);
-        ulogentries = DEF_ULOGENTRIES;
-        ulog_reset(ulog);
+    if (ulogentries == 0 || ulog->kdb_num > ulogentries)
+        ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
+
+    while (ulogentries > 2 && (SSIZE_MAX / ulogentries) < new_block)
+        ulogentries /= 2;
+    if (ulogentries < 2)
+        goto erange;
+
+    if (orig_ulogentries > ulogentries) {
+        syslog(LOG_INFO, _("ulog_resize: using %d ulog entries instead of "
+                           "requested (%d)"), ulogentries, orig_ulogentries);
+        do_reset = TRUE;
     }
+
     if ((SSIZE_MAX / ulogentries) < new_block)
-        return ERANGE;
+        goto erange;
     new_size = ulogentries * new_block;
 
     if (SSIZE_MAX - new_size < sizeof(kdb_hlog_t))
-        return ERANGE;
+        goto erange;
     new_size += sizeof(kdb_hlog_t);
 
-    if (fstat(ulogfd, &st) == -1)
+    if (fstat(log_ctx->ulogfd, &st) == -1)
         return errno;
 
     /*
@@ -157,34 +176,27 @@ ulog_resize(kdb_hlog_t *ulog, uint32_t ulogentries, int ulogfd, uint_t recsize)
      * libkadm5srv app against too large a ulog on a system where 64-bit
      * libkadm5srv apps are meant to run only.
      */
-    if (st.st_size > SSIZE_MAX)
-        return EINVAL;         /* XXX Need a better error... */
-
-    if (new_size < (size_t)st.st_size) {
-        if ((st.st_size / new_block) < ulogentries)
-            return ERANGE;
-        ulog->kdb_block = new_block;
-        ulog_sync_header(ulog);
-        return (0);
+    if (st.st_size > SSIZE_MAX || new_size > SSIZE_MAX) {
+        syslog(LOG_ERR, _("ulog_resize: ulog is too large to mmap() in; use "
+                          "a 64-bit version of this application"));
+        return EFBIG;
     }
 
-    if (new_size <= MAXLOGLEN) {
-        /*
-         * Time to expand log considering new block size
-         */
-        if (extend_file_to(ulogfd, new_size) < 0)
+    if (new_size > (size_t)st.st_size) {
+        if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
             return errno;
-
-        ulog->kdb_block = new_block;
-        ulog_sync_header(ulog);
-    } else {
-        /*
-         * Can't map into file larger than MAXLOGLEN
-         */
-        return (KRB5_LOG_ERROR);
     }
 
+    if (do_reset)
+        ulog_reset(ulog);
+    ulog->kdb_block = new_block;
+    ulog_sync_header(ulog);
+    log_ctx->ulogentries = ulogentries;
     return (0);
+
+erange:
+    syslog(LOG_ERR, _("ulog_resize: principal record too large to iprop"));
+    return ERANGE;
 }
 
 /*
@@ -225,7 +237,8 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     recsize = sizeof (kdb_ent_header_t) + upd_size;
 
     if (recsize > ulog->kdb_block) {
-        if ((retval = ulog_resize(ulog, ulogentries, ulogfd, recsize))) {
+        /* XXX Er, we should re-map now, no?! */
+        if ((retval = ulog_resize(log_ctx, ulogentries, recsize))) {
             /* Resize element array failed */
             return (retval);
         }
@@ -764,11 +777,12 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         ulog_reset(ulog);
         ulog_sync_header(ulog);
     }
+    /* XXX Move this into ulog_resize()? */
     if (ulogentries == 0 || ulog->kdb_num > ulogentries)
         ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
 
     /* Resize if need be and re-mmap() */
-    retval = ulog_resize(ulog, ulogentries, ulogfd, ulog->kdb_block);
+    retval = ulog_resize(log_ctx, ulogentries, ulog->kdb_block);
     if (retval)
         goto error;
 

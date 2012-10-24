@@ -106,8 +106,7 @@ typedef struct kdb_hlog {
     kdb_sno_t       kdb_first_sno;  /* First serial # in the update log */
     kdb_sno_t       kdb_last_sno;   /* Last serial # in the update log */
     uint16_t        kdb_state;      /* State of update log */
-    uint16_t        reserved;       /* Used to be the element size */
-    uint64_t        kdb_block;      /* Block size of each element */
+    uint16_t        kdb_block;      /* Block size of each element */
 } kdb_hlog_t;
 
 extern void ulog_sync_header(kdb_hlog_t *);

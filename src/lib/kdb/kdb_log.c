@@ -201,7 +201,7 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
         return EFBIG;
     }
 
-    if (new_size < st.st_size)
+    if (st.st_size > 0 && new_size < (size_t)st.st_size)
         new_size = st.st_size;
 
     /*
@@ -210,14 +210,14 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
      *
      * First side-effect: grow the file.
      */
-    if (new_size > st.st_size) {
+    if (st.st_size > 0 && new_size > (size_t)st.st_size) {
         if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
             return errno;
     }
 
     /* Second side-effect: reset the ulog. */
-    if (new_size > st.st_size || ulog->kdb_block != new_block ||
-        ulog->kdb_num > ulogentries) {
+    if ((st.st_size > 0 && new_size > (size_t)st.st_size) ||
+         ulog->kdb_block != new_block || ulog->kdb_num > ulogentries) {
         ulog_reset(ulog);      /* Otherwise we'd corrupt the ulog */
         ulog->kdb_block = new_block;
         ulog_sync_header(ulog);
@@ -765,7 +765,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         retval = errno;
         goto error;
     }
-    st.st_size = (st.st_size > sizeof (*ulog)) ? st.st_size : sizeof (*ulog);
+    if (st.st_size > 0 && (size_t)st.st_size <= sizeof (*ulog))
+        st.st_size = sizeof (*ulog);
 
     /* Map only the header for now until we've resized the file if need be. */
     ulog = mmap(0, sizeof (*ulog), PROT_READ | PROT_WRITE, MAP_SHARED,

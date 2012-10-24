@@ -107,12 +107,25 @@ ulog_sync_header(kdb_hlog_t *ulog)
 }
 
 /*
- * Resizes the array elements.  We reinitialize the update log rather than
- * unrolling the the log and copying it over to a temporary log for obvious
- * performance reasons.  Slaves will subsequently do a full resync, but
- * the need for resizing should be very small.  Note that the requested
- * ulogentries count is an optional suggestion (from the configuration),
- * while recsize is a requirement.
+ * Resizes the ulog file and/or the mmap()ing of it.
+ *
+ * If the ulog is resized, or if the ulog block size is changed, then the ulog
+ * is also re-initialized, thus forcing full resyncs (this should be fairly
+ * infrequent).
+ *
+ * The 'ulogentries' and 'recsize' arguments correspond to the desired ulog
+ * size in entries and the minimum entry size, respectively.  Either or both of
+ * these can be set to zero, in which case appropriate values will be
+ * determined and used.  If both are zero then the only side-effect of this
+ * function should be to re-mmap() the ulog.
+ *
+ * Note that it is not possible to reduce the ulog size via this function.  To
+ * reduce the size of a ulog you must stop kadm5srv applications, remove the
+ * ulog, and restart those applications.
+ *
+ * Note that 'recsize' is a uint_t but really may not be larger than 63488 due
+ * to the ulog header using a uint16_t for this value, and the ulog block sizes
+ * having to be multiples of 2048.
  *
  * Returns 0 on success.
  * Returns EFBIG if the new ulog can't be mmap()ed because it's a large file
@@ -135,6 +148,7 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
     if (fstat(log_ctx->ulogfd, &st) == -1)
         return errno;
 
+    /* Default optional arguments */
     if (ulogentries == 0 || ulog->kdb_num > ulogentries)
         ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
     if (recsize == 0)
@@ -155,7 +169,7 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
         goto erange;
     new_block *= ULOG_BLOCK;
 
-    if (ulogentries == 0 || ulog->kdb_num > ulogentries)
+    if (ulog->kdb_num > ulogentries)
         ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
 
     while (ulogentries > 2 && (SSIZE_MAX / ulogentries) < new_block)
@@ -163,9 +177,10 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
     if (ulogentries < 2)
         goto erange;
 
-    if (orig_ulogentries > ulogentries)
+    if (orig_ulogentries != 0 && orig_ulogentries!= ulogentries) {
         syslog(LOG_INFO, _("ulog_resize: using %d ulog entries instead of "
                            "requested (%d)"), ulogentries, orig_ulogentries);
+    }
 
     if ((SSIZE_MAX / ulogentries) < new_block)
         goto erange;
@@ -174,9 +189,6 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
     if (SSIZE_MAX - new_size < sizeof(kdb_hlog_t))
         goto erange;
     new_size += sizeof(kdb_hlog_t);
-
-    if (fstat(log_ctx->ulogfd, &st) == -1)
-        return errno;
 
     /*
      * Check that we're not accidentally clobbering a ulog by running a 32-bit
@@ -189,40 +201,44 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
         return EFBIG;
     }
 
-    /*
-     * Up to here we've had no side-effects.  If there is nothing to do then
-     * we're done, else we need to extend, reset and re-mmap() the ulog.
-     */
     if (new_size < st.st_size)
         new_size = st.st_size;
 
-    /* First side-effect */
+    /*
+     * Up to here we've had no side-effects.  After this we'll have three
+     * possible side-effects.
+     *
+     * First side-effect: grow the file.
+     */
     if (new_size > st.st_size) {
         if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
             return errno;
     }
 
-    /* Second side-effect */
-    if (new_size > st.st_size || ulog->kdb_block != new_block)
+    /* Second side-effect: reset the ulog. */
+    if (new_size > st.st_size || ulog->kdb_block != new_block ||
+        ulog->kdb_num > ulogentries) {
         ulog_reset(ulog);      /* Otherwise we'd corrupt the ulog */
-
-    ulog->kdb_block = new_block;
-    ulog_sync_header(ulog);
-
-    /* Third side-effect */
-    munmap(ulog, log_ctx->map_size);
-    ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
-                (log_ctx->map_type == FKPROPLOG) ?  MAP_PRIVATE : MAP_SHARED,
-                log_ctx->ulogfd, 0);
-    if (ulog == MAP_FAILED) {
-        log_ctx->ulog = NULL;
-        log_ctx->map_size = 0;
-        assert(errno != 0);
-        return errno;
+        ulog->kdb_block = new_block;
+        ulog_sync_header(ulog);
     }
-    log_ctx->ulog = ulog;
-    log_ctx->map_size = new_size;
-    log_ctx->ulogentries = ulogentries;
+
+    /* Third side-effect: re-mmap() the ulog. */
+    if (log_ctx->map_size != new_size) {
+        munmap(ulog, log_ctx->map_size);
+        ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
+                    log_ctx->map_type == FKPROPLOG ? MAP_PRIVATE : MAP_SHARED,
+                    log_ctx->ulogfd, 0);
+        if (ulog == MAP_FAILED) {
+            log_ctx->ulog = NULL;
+            log_ctx->map_size = 0;
+            assert(errno != 0);
+            return errno;
+        }
+        log_ctx->ulog = ulog;
+        log_ctx->map_size = new_size;
+        log_ctx->ulogentries = ulogentries;
+    }
     assert(log_ctx->ulog->kdb_block == new_block);
     return (0);
 
@@ -232,7 +248,9 @@ erange:
 }
 
 /*
- * Adds an entry to the update log.
+ * Adds an entry to the update log.  As a possible side-effect the ulog may get
+ * resized and/or re-mmap()ed in.
+ *
  * The layout of the update log looks like:
  *
  * header log -> [ update header -> xdr(kdb_incr_update_t) ], ...
@@ -255,7 +273,7 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     INIT_ULOG(context);
 
     assert(upd != NULL);
-    assert(log_ctx->ulog != NULL);
+    assert(log_ctx->map_size > sizeof(*ulog));
 
     (void) gettimeofday(&timestamp, NULL);
     ktime.seconds = timestamp.tv_sec;
@@ -265,11 +283,13 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
 
     recsize = sizeof (kdb_ent_header_t) + upd_size;
 
-    if (recsize > log_ctx->ulog->kdb_block) {
+    if (recsize > ulog->kdb_block) {
         if ((retval = ulog_resize(log_ctx, log_ctx->ulogentries, recsize))) {
             /* Resize element array failed */
             return (retval);
         }
+        /* The ulog address may have changed. */
+        ulog = log_ctx->ulog;
     }
 
     /* ulog_resize() may have changed these. */
@@ -295,6 +315,10 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     i = (cur_sno - 1) % ulogentries;
 
     indx_log = (kdb_ent_header_t *)INDEX(ulog, i);
+
+    /* Do not write past the mmap()! */
+    assert((uintptr_t)indx_log + ulog->kdb_block <=
+           (uintptr_t)ulog + log_ctx->map_size);
 
     (void) memset(indx_log, 0, ulog->kdb_block);
 
@@ -798,10 +822,10 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      * XXX Check for overflow in left-hand side of comparison below!
      */
     assert(caller == FKADMIND || caller == FKCOMMAND || caller == FKPROPLOG);
-    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
+    if (((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
         (size_t)st.st_size ||
-        ulog->kdb_last_sno > ulog->kdb_num) {
-        /* XXX Corruption? */
+        ulog->kdb_last_sno > ulog->kdb_num) && caller != FKPROPLOG) {
+        /* Looks like the ulog is corrupt. */
         ulog_reset(ulog);
         ulog_sync_header(ulog);
     }

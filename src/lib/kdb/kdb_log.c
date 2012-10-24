@@ -132,8 +132,13 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
 
     assert(ulog != NULL);
 
+    if (fstat(log_ctx->ulogfd, &st) == -1)
+        return errno;
+
     if (ulogentries == 0 || ulog->kdb_num > ulogentries)
         ulogentries = (st.st_size - sizeof (*ulog)) / ulog->kdb_block;
+    if (recsize == 0)
+        recsize = ulog->kdb_block;
 
     /*
      * We want to do some overflow checking.  There's no OFF_MAX, so we use
@@ -188,24 +193,37 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
      * Up to here we've had no side-effects.  If there is nothing to do then
      * we're done, else we need to extend, reset and re-mmap() the ulog.
      */
-    if (new_size <= (size_t) st.st_size && ulog->kdb_block == new_block)
-        return 0;
+    if (new_size < st.st_size)
+        new_size = st.st_size;
 
-    if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
-        return errno;
+    /* First side-effect */
+    if (new_size > st.st_size) {
+        if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
+            return errno;
+    }
 
-    ulog_reset(ulog);
+    /* Second side-effect */
+    if (new_size > st.st_size || ulog->kdb_block != new_block)
+        ulog_reset(ulog);      /* Otherwise we'd corrupt the ulog */
+
     ulog->kdb_block = new_block;
     ulog_sync_header(ulog);
-    log_ctx->ulogentries = ulogentries;
 
+    /* Third side-effect */
     munmap(ulog, log_ctx->map_size);
-    log_ctx->ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
-                         (log_ctx->map_type == FKPROPLOG) ?
-                         MAP_PRIVATE : MAP_SHARED, log_ctx->ulogfd, 0);
-    if (log_ctx->ulog == MAP_FAILED)
+    ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
+                (log_ctx->map_type == FKPROPLOG) ?  MAP_PRIVATE : MAP_SHARED,
+                log_ctx->ulogfd, 0);
+    if (ulog == MAP_FAILED) {
+        log_ctx->ulog = NULL;
+        log_ctx->map_size = 0;
+        assert(errno != 0);
         return errno;
+    }
+    log_ctx->ulog = ulog;
     log_ctx->map_size = new_size;
+    log_ctx->ulogentries = ulogentries;
+    assert(log_ctx->ulog->kdb_block == new_block);
     return (0);
 
 erange:
@@ -233,10 +251,8 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     kdb_log_context     *log_ctx;
     kdb_hlog_t  *ulog = NULL;
     uint32_t    ulogentries;
-    int         ulogfd;
 
     INIT_ULOG(context);
-    ulogfd = log_ctx->ulogfd;
 
     assert(upd != NULL);
     assert(log_ctx->ulog != NULL);
@@ -249,7 +265,7 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
 
     recsize = sizeof (kdb_ent_header_t) + upd_size;
 
-    if (recsize > ulog->kdb_block) {
+    if (recsize > log_ctx->ulog->kdb_block) {
         if ((retval = ulog_resize(log_ctx, log_ctx->ulogentries, recsize))) {
             /* Resize element array failed */
             return (retval);
@@ -704,6 +720,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         }
     }
     context->kdblog_context = log_ctx;
+    log_ctx->map_type = caller;
     log_ctx->ulog = ulog;
     log_ctx->ulogentries = ulogentries;
     log_ctx->ulogfd = ulogfd;
@@ -756,11 +773,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         goto error;
     }
 
-    if (caller == FKPROPLOG) {
-        ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-        return (0);
-    }
-
     if (caller == FKPROPD) {
         /*
          * We're on a slave KDC... because we're running kpropd on it.  Note
@@ -785,7 +797,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      *
      * XXX Check for overflow in left-hand side of comparison below!
      */
-    assert(caller == FKADMIND || caller == FKCOMMAND);
+    assert(caller == FKADMIND || caller == FKCOMMAND || caller == FKPROPLOG);
     if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
         (size_t)st.st_size ||
         ulog->kdb_last_sno > ulog->kdb_num) {
@@ -795,16 +807,11 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     }
 
     /* Resize if need be (ulog_resize() re-mmap()s if need be). */
-    retval = ulog_resize(log_ctx, ulogentries, ulog->kdb_block);
+    retval = ulog_resize(log_ctx, ulogentries, 0);
     if (retval)
         goto error;
-
-    if (fstat(ulogfd, &st) == -1) {
-        retval = errno;
-        goto error;
-    }
-
-    log_ctx->ulogentries = ulogentries;
+    assert(log_ctx->map_size > sizeof (*ulog));
+    ulog = log_ctx->ulog;
 
     if (caller == FKADMIND && ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
         switch (ulog->kdb_state) {
@@ -840,6 +847,7 @@ error:
         if (log_ctx->ulog == ulog)
             log_ctx->ulog = NULL;
         munmap(ulog, log_ctx->map_size);
+        log_ctx->map_size = 0;
     }
     if (ulogfd != -1)
         close(ulogfd);

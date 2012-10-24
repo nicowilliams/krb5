@@ -115,7 +115,12 @@ ulog_sync_header(kdb_hlog_t *ulog)
  * while recsize is a requirement.
  *
  * Returns 0 on success.
- * Returns EFBIG, ERANGE, or any errno that fstat(2) returns on failure.
+ * Returns EFBIG if the new ulog can't be mmap()ed because it's a large file
+ * and this is a 32-bit process.
+ * Returns ERANGE if the desired ulogentries and recsize together are too
+ * large.
+ * All other error codes are system error codes as returned by fstat(2),
+ * write(2), lseek(2), and mmap(2).
  */
 static krb5_error_code
 ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
@@ -123,7 +128,6 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
     size_t              new_block, new_size;
     struct stat         st;
     uint32_t            orig_ulogentries = ulogentries;
-    krb5_boolean        do_reset = FALSE;
     kdb_hlog_t          *ulog = log_ctx->ulog;
 
     assert(ulog != NULL);
@@ -154,11 +158,9 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
     if (ulogentries < 2)
         goto erange;
 
-    if (orig_ulogentries > ulogentries) {
+    if (orig_ulogentries > ulogentries)
         syslog(LOG_INFO, _("ulog_resize: using %d ulog entries instead of "
                            "requested (%d)"), ulogentries, orig_ulogentries);
-        do_reset = TRUE;
-    }
 
     if ((SSIZE_MAX / ulogentries) < new_block)
         goto erange;
@@ -182,16 +184,28 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
         return EFBIG;
     }
 
-    if (new_size > (size_t)st.st_size) {
-        if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
-            return errno;
-    }
+    /*
+     * Up to here we've had no side-effects.  If there is nothing to do then
+     * we're done, else we need to extend, reset and re-mmap() the ulog.
+     */
+    if (new_size <= (size_t) st.st_size && ulog->kdb_block == new_block)
+        return 0;
 
-    if (do_reset)
-        ulog_reset(ulog);
+    if (extend_file_to(log_ctx->ulogfd, new_size) < 0)
+        return errno;
+
+    ulog_reset(ulog);
     ulog->kdb_block = new_block;
     ulog_sync_header(ulog);
     log_ctx->ulogentries = ulogentries;
+
+    munmap(ulog, log_ctx->map_size);
+    log_ctx->ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
+                         (log_ctx->map_type == FKPROPLOG) ?
+                         MAP_PRIVATE : MAP_SHARED, log_ctx->ulogfd, 0);
+    if (log_ctx->ulog == MAP_FAILED)
+        return errno;
+    log_ctx->map_size = new_size;
     return (0);
 
 erange:
@@ -222,11 +236,10 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     int         ulogfd;
 
     INIT_ULOG(context);
-    ulogentries = log_ctx->ulogentries;
     ulogfd = log_ctx->ulogfd;
 
-    if (upd == NULL)
-        return (KRB5_LOG_ERROR);
+    assert(upd != NULL);
+    assert(log_ctx->ulog != NULL);
 
     (void) gettimeofday(&timestamp, NULL);
     ktime.seconds = timestamp.tv_sec;
@@ -237,12 +250,15 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     recsize = sizeof (kdb_ent_header_t) + upd_size;
 
     if (recsize > ulog->kdb_block) {
-        /* XXX Er, we should re-map now, no?! */
-        if ((retval = ulog_resize(log_ctx, ulogentries, recsize))) {
+        if ((retval = ulog_resize(log_ctx, log_ctx->ulogentries, recsize))) {
             /* Resize element array failed */
             return (retval);
         }
     }
+
+    /* ulog_resize() may have changed these. */
+    ulogentries = log_ctx->ulogentries;
+    ulog = log_ctx->ulog;
 
     cur_sno = ulog->kdb_last_sno;
 
@@ -636,9 +652,6 @@ ulog_reset(kdb_hlog_t *ulog)
  * Returns 0 on success else failure.
  */
 krb5_error_code
-ulog_remap(krb5_context context, const char *logname, uint32_t ulogentries,
-           int caller, char **db_args)
-krb5_error_code
 ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
          int caller, char **db_args)
 {
@@ -781,7 +794,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         ulog_sync_header(ulog);
     }
 
-    /* Resize if need be and... */
+    /* Resize if need be (ulog_resize() re-mmap()s if need be). */
     retval = ulog_resize(log_ctx, ulogentries, ulog->kdb_block);
     if (retval)
         goto error;
@@ -791,20 +804,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         goto error;
     }
 
-    /* ...re-mmap() */
-    munmap(ulog, sizeof (*ulog));
-    log_ctx->ulog = NULL;
-    log_ctx->map_size = 0;
-    ulog = mmap(0, st.st_size, PROT_READ | PROT_WRITE,
-                (caller == FKPROPLOG) ? MAP_PRIVATE : MAP_SHARED, ulogfd, 0);
-    if (ulog == MAP_FAILED) {
-        retval = errno;
-        goto error;
-    }
-
     log_ctx->ulogentries = ulogentries;
-    log_ctx->ulog = ulog;
-    log_ctx->map_size = st.st_size;
 
     if (caller == FKADMIND && ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
         switch (ulog->kdb_state) {

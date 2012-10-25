@@ -41,7 +41,6 @@ extern "C" {
  */
 #define KDB_ULOG_MAGIC          0x6661212
 #define KDB_ULOG_HDR_MAGIC      0x6662323
-#define KDB_ULOG_HDR_SLAVE_MAGIC      0x6663434
 
 /*
  * DB Flags

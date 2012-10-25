@@ -792,19 +792,12 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     if (do_reset)
         ulog_reset(ulog);
 
-    if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC &&
-        ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
+    if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC) {
         retval = KRB5_LOG_CORRUPT;
         goto error;
     }
 
     if (caller == FKPROPD) {
-        /*
-         * We're on a slave KDC... because we're running kpropd on it.  Note
-         * this in the ulog so that we can disallow updates of replicated
-         * attributes.
-         */
-        ulog->kdb_hmagic = KDB_ULOG_HDR_SLAVE_MAGIC;
         ulog_sync_header(ulog);
         ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
         return (0);
@@ -838,7 +831,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     assert(log_ctx->map_size > sizeof (*ulog));
     ulog = log_ctx->ulog;
 
-    if (caller == FKADMIND && ulog->kdb_hmagic != KDB_ULOG_HDR_SLAVE_MAGIC) {
+    if (caller == FKADMIND) {
         switch (ulog->kdb_state) {
         case KDB_STABLE:
         case KDB_UNSTABLE:

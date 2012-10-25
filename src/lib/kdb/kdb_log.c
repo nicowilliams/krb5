@@ -186,9 +186,9 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
         goto erange;
     new_size = ulogentries * new_block;
 
-    if (SSIZE_MAX - new_size < sizeof(kdb_hlog_t))
+    if (SSIZE_MAX - new_size < sizeof (kdb_hlog_t))
         goto erange;
-    new_size += sizeof(kdb_hlog_t);
+    new_size += sizeof (kdb_hlog_t);
 
     /*
      * Check that we're not accidentally clobbering a ulog by running a 32-bit
@@ -273,7 +273,7 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     INIT_ULOG(context);
 
     assert(upd != NULL);
-    assert(log_ctx->map_size > sizeof(*ulog));
+    assert(log_ctx->map_size > sizeof (*ulog));
 
     (void) gettimeofday(&timestamp, NULL);
     ktime.seconds = timestamp.tv_sec;
@@ -284,11 +284,10 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
     recsize = sizeof (kdb_ent_header_t) + upd_size;
 
     if (recsize > ulog->kdb_block) {
-        if ((retval = ulog_resize(log_ctx, log_ctx->ulogentries, recsize))) {
-            /* Resize element array failed */
+        retval = ulog_resize(log_ctx, log_ctx->ulogentries, recsize);
+        if (retval)
             return (retval);
-        }
-        /* The ulog address may have changed. */
+        /* The ulog mmap()ed address may have changed. */
         ulog = log_ctx->ulog;
     }
 

@@ -427,8 +427,7 @@ ulog_delete_update(krb5_context context, kdb_incr_update_t *upd)
 }
 
 /*
- * Used by the slave or master (during ulog_check) to update it's hash db from
- * the incr update log.
+ * Used by the slave to update it's hash db from the incr update log.
  *
  * Must be called with lock held.
  */
@@ -527,118 +526,10 @@ cleanup:
     if (fupd)
         ulog_free_entries(fupd, no_of_updates);
 
-    if (log_ctx && (log_ctx->iproprole == IPROP_SLAVE)) {
-        if (retval)
-            ulog_finish_update_slave(ulog, errlast);
-        else
-            ulog_finish_update_slave(ulog, incr_ret->lastentry);
-    }
-
-    return (retval);
-}
-
-/*
- * Validate the log file and resync any uncommitted update entries
- * to the principal database.
- *
- * Must be called with lock held.
- */
-static krb5_error_code
-ulog_check(krb5_context context, kdb_hlog_t *ulog, char **db_args)
-{
-    XDR                 xdrs;
-    krb5_error_code     retval = 0;
-    unsigned int        i;
-    kdb_ent_header_t    *indx_log;
-    kdb_incr_update_t   *upd = NULL;
-    kdb_incr_result_t   *incr_ret = NULL;
-
-    ulog->kdb_state = KDB_STABLE;
-
-    for (i = 0; i < ulog->kdb_num; i++) {
-        indx_log = (kdb_ent_header_t *)INDEX(ulog, i);
-
-        if (indx_log->kdb_umagic != KDB_ULOG_MAGIC) {
-            /*
-             * Update entry corrupted we should scream and die
-             */
-            ulog->kdb_state = KDB_CORRUPT;
-            retval = KRB5_LOG_CORRUPT;
-            break;
-        }
-
-        if (indx_log->kdb_commit == FALSE) {
-            ulog->kdb_state = KDB_UNSTABLE;
-
-            incr_ret = (kdb_incr_result_t *)
-                malloc(sizeof (kdb_incr_result_t));
-            if (incr_ret == NULL) {
-                retval = errno;
-                goto error;
-            }
-
-            upd = (kdb_incr_update_t *)
-                malloc(sizeof (kdb_incr_update_t));
-            if (upd == NULL) {
-                retval = errno;
-                goto error;
-            }
-
-            (void) memset(upd, 0, sizeof (kdb_incr_update_t));
-            xdrmem_create(&xdrs, (char *)indx_log->entry_data,
-                          indx_log->kdb_entry_size, XDR_DECODE);
-            if (!xdr_kdb_incr_update_t(&xdrs, upd)) {
-                retval = KRB5_LOG_CONV;
-                goto error;
-            }
-
-            incr_ret->updates.kdb_ulog_t_len = 1;
-            incr_ret->updates.kdb_ulog_t_val = upd;
-
-            upd->kdb_commit = TRUE;
-
-            /*
-             * We don't want to readd this update and just use the
-             * existing update to be propagated later on
-             */
-            ulog_set_role(context, IPROP_NULL);
-            retval = ulog_replay(context, incr_ret, db_args);
-
-            /*
-             * upd was freed by ulog_replay, we NULL
-             * the pointer in case we subsequently break from loop.
-             */
-            upd = NULL;
-            if (incr_ret) {
-                free(incr_ret);
-                incr_ret = NULL;
-            }
-            ulog_set_role(context, IPROP_MASTER);
-
-            if (retval)
-                goto error;
-
-            /*
-             * We flag this as committed since this was
-             * the last entry before kadmind crashed, ergo
-             * the slaves have not seen this update before
-             */
-            indx_log->kdb_commit = TRUE;
-            retval = ulog_sync_update(ulog, indx_log);
-            if (retval)
-                goto error;
-
-            ulog->kdb_state = KDB_STABLE;
-        }
-    }
-
-error:
-    if (upd)
-        ulog_free_entries(upd, 1);
-
-    free(incr_ret);
-
-    ulog_sync_header(ulog);
+    if (retval)
+        ulog_finish_update_slave(ulog, errlast);
+    else
+        ulog_finish_update_slave(ulog, incr_ret->lastentry);
 
     return (retval);
 }
@@ -831,30 +722,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
             goto error;
         assert(ulogentries == 0 || log_ctx->map_size > sizeof (*ulog));
         ulog = log_ctx->ulog;
-    }
-
-    if (caller == FKADMIND) {
-        switch (ulog->kdb_state) {
-        case KDB_STABLE:
-        case KDB_UNSTABLE:
-            /*
-             * Log is currently un/stable, check anyway
-             */
-            retval = ulog_check(context, ulog, db_args);
-            ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-            if (retval)
-                return (retval);
-            break;
-        case KDB_CORRUPT:
-            ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-            return (KRB5_LOG_CORRUPT);
-        default:
-            /*
-             * Invalid db state
-             */
-            ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-            return (KRB5_LOG_ERROR);
-        }
     }
 
     ulog_lock(context, KRB5_LOCKMODE_UNLOCK);

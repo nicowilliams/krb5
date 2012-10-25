@@ -891,20 +891,24 @@ krb5_db_put_principal(krb5_context kcontext, krb5_db_entry *entry)
     if (status)
         goto clean_n_exit;
 
-    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER)) {
+    /*
+     * It's possible to have log_ctx->iproprole == IPROP_MASTER but the
+     * ulog not opened.  This happens in the kdb5_util create and load
+     * cases since there's no point in logging the updates then do.
+     */
+    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER) &&
+        log_ctx->ulogfd > -1) {
         upd = k5alloc(sizeof(*upd), &status);
         if (upd == NULL)
             goto clean_n_exit;
         if ((status = ulog_conv_2logentry(kcontext, entry, upd)))
             goto clean_n_exit;
-    }
 
-    status = ulog_lock(kcontext, KRB5_LOCKMODE_EXCLUSIVE);
-    if (status != 0)
-        goto err_lock;
-    ulog_locked = 1;
+        status = ulog_lock(kcontext, KRB5_LOCKMODE_EXCLUSIVE);
+        if (status != 0)
+            goto err_lock;
+        ulog_locked = 1;
 
-    if (upd != NULL) {
         status = krb5_unparse_name(kcontext, entry->princ, &princ_name);
         if (status != 0)
             goto err_lock;
@@ -917,12 +921,13 @@ krb5_db_put_principal(krb5_context kcontext, krb5_db_entry *entry)
     }
 
     status = v->put_principal(kcontext, entry, db_args);
-    if (status == 0 && upd != NULL)
-        (void) ulog_finish_update(kcontext, upd);
 
 err_lock:
-    if (ulog_locked)
+    if (ulog_locked) {
+        if (status == 0)
+            ulog_finish_update(kcontext, upd);
         ulog_lock(kcontext, KRB5_LOCKMODE_UNLOCK);
+    }
 
 clean_n_exit:
     free_db_args(kcontext, db_args);
@@ -953,20 +958,20 @@ krb5_db_delete_principal(krb5_context kcontext, krb5_principal search_for)
     kdb_incr_update_t upd;
     char *princ_name = NULL;
     kdb_log_context *log_ctx;
+    int ulog_locked = 0;
 
     log_ctx = kcontext->kdblog_context;
 
     status = get_vftabl(kcontext, &v);
     if (status)
         return status;
-    status = ulog_lock(kcontext, KRB5_LOCKMODE_EXCLUSIVE);
-    if (status)
-        return status;
+    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER) &&
+        log_ctx->ulogfd > -1) {
+        status = ulog_lock(kcontext, KRB5_LOCKMODE_EXCLUSIVE);
+        if (status)
+            return status;
+        ulog_locked = 1;
 
-    /*
-     * We'll be sharing the same locks as db for logging
-     */
-    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER)) {
         if ((status = krb5_unparse_name(kcontext, search_for, &princ_name))) {
             ulog_lock(kcontext, KRB5_LOCKMODE_UNLOCK);
             return status;
@@ -978,9 +983,8 @@ krb5_db_delete_principal(krb5_context kcontext, krb5_principal search_for)
         upd.kdb_princ_name.utf8str_t_len = strlen(princ_name);
 
         if ((status = ulog_delete_update(kcontext, &upd)) != 0) {
-            ulog_lock(kcontext, KRB5_LOCKMODE_UNLOCK);
             free(princ_name);
-            return status;
+            goto err_lock;
         }
 
         free(princ_name);
@@ -993,14 +997,15 @@ krb5_db_delete_principal(krb5_context kcontext, krb5_principal search_for)
 
     status = v->delete_principal(kcontext, search_for);
 
+err_lock:
     /*
      * We need to commit our update upon success
      */
-    if (!status)
-        if (log_ctx && (log_ctx->iproprole == IPROP_MASTER))
-            (void) ulog_finish_update(kcontext, &upd);
-
-    ulog_lock(kcontext, KRB5_LOCKMODE_UNLOCK);
+    if (ulog_locked) {
+        if (status == 0)
+            ulog_finish_update(kcontext, &upd);
+        ulog_lock(kcontext, KRB5_LOCKMODE_UNLOCK);
+    }
 
     return status;
 }

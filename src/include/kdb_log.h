@@ -122,8 +122,10 @@ typedef struct kdb_ent_header {
 typedef struct _kdb_log_context {
     iprop_role      iproprole;
     kdb_hlog_t      *ulog;
+    size_t          map_size;
     uint32_t        ulogentries;
     int             ulogfd;
+    int             map_type; /* FK* values, like FKADMIND */
 } kdb_log_context;
 
 #ifdef  __cplusplus

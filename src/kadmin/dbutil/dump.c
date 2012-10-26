@@ -2656,7 +2656,7 @@ load_db(argc, argv)
     int                 db_locked = 0;
     kdb_log_context     *log_ctx;
     krb5_boolean        add_update = TRUE;
-    uint32_t            caller = FKCOMMAND;
+    int                 ulog_flags = ULOG_MAP_ENTRIES;
     uint32_t            last_sno, last_seconds, last_useconds;
 
     /*
@@ -2688,7 +2688,7 @@ load_db(argc, argv)
             if (global_params.iprop_enabled) {
                 load = &iprop_version;
                 add_update = FALSE;
-                caller = FKLOAD;
+                ulog_flags = ULOG_RESET;
             } else {
                 fprintf(stderr, _("Iprop not enabled\n"));
                 exit_status++;
@@ -2798,7 +2798,7 @@ load_db(argc, argv)
      */
     if (global_params.iprop_enabled &&
         ulog_map(kcontext, global_params.iprop_logfile,
-                 global_params.iprop_ulogsize, caller, db5util_db_args)) {
+                 global_params.iprop_ulogsize, ulog_flags, db5util_db_args)) {
         fprintf(stderr, "Could not open iprop ulog\n");
         exit_status++;
         if (dumpfile)

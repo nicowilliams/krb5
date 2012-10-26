@@ -568,7 +568,8 @@ kterr:
          * and setup the service.
          */
         if ((ret = ulog_map(hctx, params.iprop_logfile,
-                            params.iprop_ulogsize, FKADMIND, db_args)) != 0) {
+                            params.iprop_ulogsize,
+                            ULOG_MAP_ENTRIES, db_args)) != 0) {
             fprintf(stderr,
                     _("%s: %s while mapping update log (`%s.ulog')\n"),
                     whoami, error_message(ret), params.dbname);

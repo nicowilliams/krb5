@@ -233,7 +233,8 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
     if (log_ctx->map_size != new_size) {
         munmap(ulog, log_ctx->map_size);
         ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
-                    log_ctx->map_type == FKPROPLOG ? MAP_PRIVATE : MAP_SHARED,
+                    (log_ctx->flags & ULOG_MAP_PRIVATE) ?
+                    MAP_PRIVATE : MAP_SHARED,
                     log_ctx->ulogfd, 0);
         if (ulog == MAP_FAILED) {
             log_ctx->ulog = NULL;
@@ -558,38 +559,29 @@ ulog_reset(kdb_hlog_t *ulog)
  * no-op.  Else ulogentries will be taken as a minimum (not maximum) and the
  * ulog will be resized if need be.
  *
- * Semantics for various values of caller:
+ * Semantics for various flags:
  *
- *  - FKPROPLOG
+ *  - ULOG_RESET
  *
- *    Don't create if it doesn't exist, map as MAP_PRIVATE.
+ *    Truncate the ulog and re-initialize it.
  *
- *  - FKPROPD
+ *  - ULOG_DONT_CREATE
  *
- *    Create and initialize if need be, map as MAP_SHARED.
+ *    If the ulog doesn't exist just return an error.
  *
- *  - FKLOAD
+ *  - ULOG_MAP_PRIVATE
  *
- *    Create if need be, initialize (even if the ulog was already present), map
- *    as MAP_SHARED.  (Intended for kdb5_util load of iprop dump.)
+ *    mmap() the ulog with MAP_PRIVATE.
  *
- *  - FKCOMMAND
+ *  - ULOG_MAP_ENTRIES
  *
- *    Create and [re-]initialize if need be, size appropriately, map as
- *    MAP_SHARED.  (Intended for kdb5_util create and kdb5_util load of
- *    non-iprop dump.)
+ *    mmap() the entire ulog, not just the header.
  *
- *  - FKADMIN
- *
- *    Create and [re-]initialize if need be, size appropriately, map as
- *    MAP_SHARED, and check consistency and recover as necessary.  (Intended
- *    for kadmind and kadmin.local.)
- *
- * Returns 0 on success else failure.
+ * Returns 0 on success else a krb5 error code on failure.
  */
 krb5_error_code
 ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
-         int caller, char **db_args)
+         int flags, char **db_args)
 {
     struct stat st;
     krb5_error_code     retval;
@@ -597,7 +589,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     kdb_hlog_t  *ulog = NULL;
     int         ulogfd = -1;
     int         locked = 0;
-    krb5_boolean        do_reset = FALSE;
+    krb5_boolean        do_reset = (flags & ULOG_RESET) ? TRUE : FALSE;
 
     /*
      * If context->kdblog_context != NULL... we got called again.  This may be
@@ -608,7 +600,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      */
     if (log_ctx != NULL) {
         if (log_ctx->ulog != NULL && log_ctx->ulogfd > -1 &&
-            log_ctx->map_type == caller)
+            (log_ctx->flags == (flags & ULOG_MAP_FLAGS)))
             return (0);
         if (log_ctx->ulogfd > -1) {
             close(log_ctx->ulogfd);
@@ -619,11 +611,11 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
             log_ctx->ulog = NULL;
             log_ctx->map_size = 0;
         }
-        log_ctx->map_type = 0;
+        log_ctx->flags = 0;
     }
 
     if (stat(logname, &st) == -1) {
-        if (caller == FKPROPLOG)
+        if ((flags & ULOG_DONT_CREATE))
             return (errno);
         ulogfd = open(logname, O_RDWR | O_CREAT, 0600);
         do_reset = TRUE;
@@ -640,7 +632,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         }
     }
     context->kdblog_context = log_ctx;
-    log_ctx->map_type = caller;
+    log_ctx->flags = flags & ULOG_MAP_FLAGS;
     log_ctx->ulog = ulog;
     log_ctx->ulogentries = ulogentries;
     log_ctx->ulogfd = ulogfd;
@@ -674,31 +666,23 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     log_ctx->map_size = sizeof (*ulog);
     log_ctx->ulog = ulog;
 
-    /*
-     * We've mapped only the header at this point, and that may be enough for
-     * some callers.
-     */
-    if (caller == FKLOAD) {
+    if (do_reset) {
         ulog_reset(ulog);
+        if (flags & ULOG_RESET)
+            ftruncate(ulogfd, sizeof (*ulog));
+    }
+
+    if (!(flags & ULOG_MAP_ENTRIES)) {
+        /* Probably kpropd, kproplog, or kdb5_util load. */
         ulog_sync_header(ulog);
         ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
         return (0);
     }
-
-    if (do_reset)
-        ulog_reset(ulog);
 
     if (ulog->kdb_hmagic != KDB_ULOG_HDR_MAGIC) {
         retval = KRB5_LOG_CORRUPT;
         goto error;
     }
-
-    if (caller == FKPROPD) {
-        ulog_sync_header(ulog);
-        ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-        return (0);
-    }
-
 
     /*
      * Resize the ulog if need be, then re-mmap() it, this time the whole file.
@@ -711,10 +695,9 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      *
      * XXX Check for overflow in left-hand side of comparison below!
      */
-    assert(caller == FKADMIND || caller == FKCOMMAND || caller == FKPROPLOG);
-    if (((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
+    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
         (size_t)st.st_size ||
-        ulog->kdb_last_sno > ulog->kdb_num) && caller != FKPROPLOG) {
+        (ulog->kdb_last_sno > ulog->kdb_num && ulog->kdb_num != 0)) {
         /* Looks like the ulog is corrupt. */
         ulog_reset(ulog);
         ulog_sync_header(ulog);

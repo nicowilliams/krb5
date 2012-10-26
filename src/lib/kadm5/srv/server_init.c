@@ -447,7 +447,7 @@ kadm5_init_iprop(void *handle, char **db_args)
         if ((retval = ulog_map(iprop_h->context,
                                iprop_h->params.iprop_logfile,
                                iprop_h->params.iprop_ulogsize,
-                               FKCOMMAND, db_args)) != 0)
+                               ULOG_MAP_ENTRIES, db_args)) != 0)
             return (retval);
     }
     return (0);

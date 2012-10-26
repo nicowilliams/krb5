@@ -557,7 +557,8 @@ ulog_reset(kdb_hlog_t *ulog)
  * The ulogentries argument is a suggested size.  If ulog_map() is called
  * again (for the same context) after having succeeded once, then it will be a
  * no-op.  Else ulogentries will be taken as a minimum (not maximum) and the
- * ulog will be resized if need be.
+ * ulog will be resized if need be.  If ulogentries is zero then the
+ * ulog will not be made larger than its header size.
  *
  * Semantics for various flags:
  *
@@ -600,7 +601,7 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      */
     if (log_ctx != NULL) {
         if (log_ctx->ulog != NULL && log_ctx->ulogfd > -1 &&
-            (log_ctx->flags == (flags & ULOG_MAP_FLAGS)))
+            (log_ctx->flags == (flags & ULOG_MAP_PRIVATE)))
             return (0);
         if (log_ctx->ulogfd > -1) {
             close(log_ctx->ulogfd);
@@ -704,11 +705,13 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     }
 
     /* Resize if need be (ulog_resize() re-mmap()s if need be). */
-    retval = ulog_resize(log_ctx, ulogentries, 0);
-    if (retval)
-        goto error;
-    assert(log_ctx->map_size > sizeof (*ulog));
-    ulog = log_ctx->ulog;
+    if (ulogentries > 0 && (flags & ULOG_MAP_ENTRIES)) {
+        retval = ulog_resize(log_ctx, ulogentries, 0);
+        if (retval)
+            goto error;
+        assert(log_ctx->map_size > sizeof (*ulog));
+        ulog = log_ctx->ulog;
+    }
 
     ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
     return (0);

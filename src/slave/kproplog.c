@@ -423,16 +423,18 @@ print_update(kdb_hlog_t *ulog, uint32_t entry, unsigned int verbose)
          */
         if (indx_log->kdb_umagic != KDB_ULOG_MAGIC) {
             (void) fprintf(stderr,
-                           _("Corrupt update entry\n\n"));
-            exit(1);
+                           _("Corrupt update entry %d (index %d)\n\n"),
+                           i, indx);
+            continue;
         }
 
         (void) memset(&upd, 0, sizeof (kdb_incr_update_t));
         xdrmem_create(&xdrs, (char *)indx_log->entry_data,
                       indx_log->kdb_entry_size, XDR_DECODE);
         if (!xdr_kdb_incr_update_t(&xdrs, &upd)) {
-            (void) printf(_("Entry data decode failure\n\n"));
-            exit(1);
+            (void) fprintf(stderr, _("Entry %d (index %d) data decode "
+                                     "failure\n\n"), i, indx);
+            continue;
         }
 
         (void) printf("---\n");

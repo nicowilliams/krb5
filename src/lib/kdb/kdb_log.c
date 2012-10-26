@@ -50,8 +50,7 @@ ulog_lock(krb5_context ctx, int mode)
 {
     kdb_log_context *log_ctx = NULL;
 
-    if (ctx == NULL)
-        return KRB5_LOG_ERROR;
+    assert(ctx != NULL);
     if (ctx->kdblog_context == NULL || ctx->kdblog_context->iproprole == IPROP_NULL)
         return 0;
     log_ctx = ctx->kdblog_context;
@@ -68,8 +67,7 @@ ulog_sync_update(kdb_hlog_t *ulog, kdb_ent_header_t *upd)
     ulong_t             start, end, size;
     krb5_error_code     retval;
 
-    if (ulog == NULL)
-        return (KRB5_LOG_ERROR);
+    assert(ulog != NULL);
 
     if (!pagesize)
         pagesize = getpagesize();
@@ -807,29 +805,19 @@ ulog_get_entries(krb5_context context,          /* input - krb5 lib config */
                 ulog->kdb_last_time.useconds;
             ulog_handle->ret = UPDATE_OK;
 
-            (void) ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-            (void) krb5_db_unlock(context);
-
-            return (0);
         } else {
             /*
              * We have time stamp mismatch or we no longer have
              * the slave's last sno, so we brute force it
              */
-            (void) ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-            (void) krb5_db_unlock(context);
             ulog_handle->ret = UPDATE_FULL_RESYNC_NEEDED;
-
-            return (0);
         }
     }
 
-    /*
-     * Should never get here, return error
-     */
-    (void) ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
-    ulog_handle->ret = UPDATE_ERROR;
-    return (KRB5_LOG_ERROR);
+    ulog_lock(context, KRB5_LOCKMODE_UNLOCK);
+    krb5_db_unlock(context);
+
+    return (0);
 }
 
 krb5_error_code

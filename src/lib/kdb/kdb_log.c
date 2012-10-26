@@ -526,12 +526,10 @@ cleanup:
     if (fupd)
         ulog_free_entries(fupd, no_of_updates);
 
-    if (log_ctx && (log_ctx->iproprole == IPROP_SLAVE)) {
-        if (retval)
-            ulog_finish_update_slave(ulog, errlast);
-        else
-            ulog_finish_update_slave(ulog, incr_ret->lastentry);
-    }
+    if (retval)
+        ulog_finish_update_slave(ulog, errlast);
+    else
+        ulog_finish_update_slave(ulog, incr_ret->lastentry);
 
     return (retval);
 }

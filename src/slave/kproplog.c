@@ -544,7 +544,8 @@ main(int argc, char **argv)
                   params.iprop_logfile);
 
     if (ulog_map(context, params.iprop_logfile, 0,
-                 reset ? FKADMIND : FKPROPLOG, db_args)) {
+                 reset ? ULOG_RESET :
+                 (ULOG_MAP_PRIVATE | ULOG_MAP_ENTRIES), db_args)) {
         (void) fprintf(stderr, _("Unable to map log file %s\n\n"),
                        params.iprop_logfile);
         exit(1);

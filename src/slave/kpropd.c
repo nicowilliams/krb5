@@ -1252,7 +1252,7 @@ void PRS(argv)
         ulog_set_role(kpropd_context, IPROP_SLAVE);
 
         if (ulog_map(kpropd_context, params.iprop_logfile,
-                     params.iprop_ulogsize, FKPROPD, db_args)) {
+                     params.iprop_ulogsize, 0, db_args)) {
             com_err(progname, errno,
                     _("Unable to map log!\n"));
             exit(1);

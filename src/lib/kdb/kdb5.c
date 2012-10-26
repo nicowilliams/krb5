@@ -897,7 +897,7 @@ krb5_db_put_principal(krb5_context kcontext, krb5_db_entry *entry)
      * cases since there's no point in logging the updates then do.
      */
     if (log_ctx && (log_ctx->iproprole == IPROP_MASTER) &&
-        log_ctx->ulogfd > -1) {
+        (log_ctx->flags & ULOG_MAP_ENTRIES)) {
         upd = k5alloc(sizeof(*upd), &status);
         if (upd == NULL)
             goto clean_n_exit;

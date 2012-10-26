@@ -686,10 +686,9 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      * state) we compute the actual ulogentries from the file size -- you can't
      * truncate the ulog by reducing the size in the config file.  To truncate
      * use kproplog -R to reset the ulog.
-     *
-     * XXX Check for overflow in left-hand side of comparison below!
      */
-    if ((sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
+    if ((SSIZE_MAX - sizeof (*ulog)) / ulog->kdb_block < ulog->kdb_num ||
+        (sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
         (size_t)st.st_size ||
         (ulog->kdb_last_sno > ulog->kdb_num && ulog->kdb_num != 0)) {
         /* Looks like the ulog is corrupt. */
@@ -902,8 +901,7 @@ static int extend_file_to(int fd, uint_t new_size)
     current_offset = lseek(fd, 0, SEEK_END);
     if (current_offset < 0)
         return -1;
-    /* XXX INT_MAX?! */
-    if (new_size > INT_MAX) {
+    if (new_size > SSIZE_MAX) {
         errno = EINVAL;
         return -1;
     }

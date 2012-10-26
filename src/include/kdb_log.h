@@ -43,13 +43,13 @@ extern "C" {
 #define KDB_ULOG_HDR_MAGIC      0x6662323
 
 /*
- * DB Flags
+ * ulog_map() flags
  */
-#define FKADMIND        1
-#define FKPROPLOG       2
-#define FKPROPD         3
-#define FKCOMMAND       4       /* Includes kadmin.local and kdb5_util */
-#define FKLOAD          5       /* kdb5_util load */
+#define ULOG_RESET              1
+#define ULOG_DONT_CREATE        2
+#define ULOG_MAP_PRIVATE        4
+#define ULOG_MAP_ENTRIES        8
+#define ULOG_MAP_FLAGS          (ULOG_MAP_PRIVATE | ULOG_MAP_ENTRIES)
 
 /*
  * Default ulog file attributes
@@ -69,7 +69,7 @@ extern "C" {
  */
 extern krb5_error_code ulog_map(krb5_context context,
                                 const char *logname, uint32_t entries,
-                                int caller,
+                                int flags,
                                 char **db_args);
 extern krb5_error_code ulog_add_update(krb5_context context,
                                        kdb_incr_update_t *upd);
@@ -125,7 +125,7 @@ typedef struct _kdb_log_context {
     size_t          map_size;
     uint32_t        ulogentries;
     int             ulogfd;
-    int             map_type; /* FK* values, like FKADMIND */
+    int             flags;
 } kdb_log_context;
 
 #ifdef  __cplusplus

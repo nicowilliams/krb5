@@ -290,7 +290,7 @@ main(argc, argv)
         exit(0);
     }
 
-    if (log_ctx == NULL || log_ctx->iproprole != IPROP_SLAVE) {
+    if (log_ctx == NULL || params.iprop_enabled == FALSE) {
         do_standalone();
         /* do_standalone() should never return */
         assert(0);
@@ -1259,8 +1259,6 @@ void PRS(argv)
         }
     }
     log_ctx = kpropd_context->kdblog_context;
-    if (log_ctx && (log_ctx->iproprole == IPROP_SLAVE))
-        ulog_set_role(kpropd_context, IPROP_SLAVE);
 }
 
 /*
@@ -1677,7 +1675,7 @@ load_database(context, kdb_util, database_file_name)
         edit_av[count++] = "-d";
         edit_av[count++] = kerb_database;
     }
-    if (log_ctx && log_ctx->iproprole == IPROP_SLAVE) {
+    if (log_ctx && params.iprop_enabled == TRUE) {
         edit_av[count++] = "-i";
     }
     edit_av[count++] = database_file_name;

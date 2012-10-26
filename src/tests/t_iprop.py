@@ -51,7 +51,8 @@ iprop_kdc_conf = {
                 'iprop_slave_poll' : '600'
                 }}},
     'master' : { 'realms' : { '$realm' : {
-                'iprop_logfile' : '$testdir/db.ulog'
+                'iprop_logfile' : '$testdir/db.ulog',
+                'iprop_master_ulogsize': '10'
                 }}},
     'slave' : { 'realms' : { '$realm' : {
                 'iprop_logfile' : '$testdir/slave-db.ulog'
@@ -170,5 +171,51 @@ wait_for_prop(realm, True)
 out = realm.run_as_slave([kproplog, '-h'])
 if 'Last serial # : 1' not in out:
     fail('Update log on slave has incorrect last serial number')
+
+# Test ulog_resize().
+#
+# First we test changes to the number of entries in the ulog.
+realm.run_as_master([kproplog, '-R'])
+realm.addprinc('foobar')
+ulog = os.path.join(realm.testdir, 'db.ulog')
+f = open(ulog, 'r')
+f.seek(0, 2)
+ulog_sz = f.tell()
+f.close()
+iprop_ulogsize = int(iprop_kdc_conf['master']['realms']['$realm']\
+    ['iprop_master_ulogsize'])
+if (ulog_sz != (40 + iprop_ulogsize * 2048)):
+    fail('Incorrect ulog size ' + str(ulog_sz))
+i = iprop_ulogsize + 5
+iprop_ulogsize += 10
+iprop_kdc_conf['master']['realms']['$realm']['iprop_master_ulogsize'] = \
+    str(iprop_ulogsize)
+realm.stop_kadmind()
+realm.reconfig(kdc_conf=iprop_kdc_conf)
+realm.start_kadmind()
+while i > 0:
+    realm.addprinc('foo' + str(i))
+    i -= 1
+
+f = open(ulog, 'r')
+f.seek(0, 2)
+ulog_sz = f.tell()
+f.close()
+if (ulog_sz != (40 + iprop_ulogsize * 2048)):
+    fail('Incorrect ulog size ' + str(ulog_sz))
+
+# Now we test changes to the ulog entry size
+i = 50
+while i > 0:
+    realm.run_kadminl('cpw -randkey -e aes256-cts:normal -keepold foobar')
+    i -= 1
+
+f = open(ulog, 'r')
+f.seek(0, 2)
+new_ulog_sz = f.tell()
+f.close()
+if (new_ulog_sz <= ulog_sz):
+    fail('Ulog did not grow as expected')
+out = realm.run_as_master([kproplog])
 
 success('iprop tests')

@@ -272,6 +272,9 @@ Scripts may use the following realm methods and attributes:
 * realm.stop(): Stop any daemon processes running on behalf of the
   realm.
 
+* realm.reconfig(krb5_conf=None, kdc_conf=None): Re-write the
+  configuration files.
+
 * realm.addprinc(princname, password=None): Using kadmin.local, create
   a principle in the KDB named princname, with either a random or
   specified key.
@@ -946,6 +949,16 @@ class K5Realm(object):
     def prod_kpropd(self):
         assert(self._kpropd_proc is not None)
         self._kpropd_proc.send_signal(signal.SIGUSR1)
+
+    def reconfig(self, krb5_conf=None, kdc_conf=None):
+        self._krb5_conf = _cfg_merge(_default_krb5_conf, krb5_conf)
+        self._kdc_conf = _cfg_merge(_default_kdc_conf, kdc_conf)
+        self._create_krb5_conf('client')
+        self._create_krb5_conf('server')
+        self._create_krb5_conf('master')
+        self._create_krb5_conf('slave')
+        self._create_kdc_conf('master')
+        self._create_kdc_conf('slave')
 
     def stop(self):
         if self._kdc_proc:

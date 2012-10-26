@@ -178,7 +178,7 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
 
     while (ulogentries > 2 && (SSIZE_MAX / ulogentries) < new_block)
         ulogentries /= 2;
-    if (ulogentries < 2)
+    if (ulogentries == 1)
         goto erange;
 
     if (orig_ulogentries != 0 && orig_ulogentries!= ulogentries) {
@@ -186,7 +186,7 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
                            "requested (%d)"), ulogentries, orig_ulogentries);
     }
 
-    if ((SSIZE_MAX / ulogentries) < new_block)
+    if (ulogentries > 0 && (SSIZE_MAX / ulogentries) < new_block)
         goto erange;
     new_size = ulogentries * new_block;
 
@@ -551,10 +551,10 @@ ulog_reset(kdb_hlog_t *ulog)
  * closing of the fd are implicitly performed by the caller.
  *
  * The ulogentries argument is a suggested size.  If ulog_map() is called
- * again (for the same context) after having succeeded once, then it will be a
+ * again (for the same context) after having succeeded once, then it may be a
  * no-op.  Else ulogentries will be taken as a minimum (not maximum) and the
  * ulog will be resized if need be.  If ulogentries is zero then the
- * ulog will not be made larger than its header size.
+ * ulog size will not change.
  *
  * Semantics for various flags:
  *
@@ -697,11 +697,11 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     }
 
     /* Resize if need be (ulog_resize() re-mmap()s if need be). */
-    if (ulogentries > 0 && (flags & ULOG_MAP_ENTRIES)) {
+    if (ulogentries > 0 || (flags & ULOG_MAP_ENTRIES)) {
         retval = ulog_resize(log_ctx, ulogentries, 0);
         if (retval)
             goto error;
-        assert(log_ctx->map_size > sizeof (*ulog));
+        assert(ulogentries == 0 || log_ctx->map_size > sizeof (*ulog));
         ulog = log_ctx->ulog;
     }
 

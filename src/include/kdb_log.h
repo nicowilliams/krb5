@@ -130,7 +130,6 @@ typedef struct _kdb_log_context {
     size_t          size;
     uint32_t        ulogentries;
     int             ulogfd;
-    int             flags;
 } kdb_log_context;
 
 #ifdef  __cplusplus

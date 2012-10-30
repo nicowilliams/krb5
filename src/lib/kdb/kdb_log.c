@@ -508,7 +508,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
             log_ctx->ulog = NULL;
             log_ctx->size = 0;
         }
-        log_ctx->flags = 0;
     }
 
     if (stat(logname, &st) == -1) {
@@ -536,7 +535,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
 
     /* From here on we must goto error; there's just one return 0 below. */
     context->kdblog_context = log_ctx;
-    log_ctx->flags = flags & ULOG_MAP_FLAGS;
     log_ctx->ulog = ulog;
     log_ctx->ulogfd = ulogfd;
     retval = ulog_lock(context, KRB5_LOCKMODE_EXCLUSIVE);

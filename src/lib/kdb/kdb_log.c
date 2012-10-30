@@ -229,10 +229,12 @@ ulog_resize(kdb_log_context *log_ctx, uint32_t ulogentries, uint_t recsize)
 
     /* Third side-effect: re-mmap() the ulog. */
     if (log_ctx->map_size != new_size) {
+        /*
+         * This can only happen if we're a master type process, so just
+         * MAP_SHARED.
+         */
         munmap(ulog, log_ctx->map_size);
-        ulog = mmap(0, new_size, PROT_READ | PROT_WRITE,
-                    (log_ctx->flags & ULOG_MAP_PRIVATE) ?
-                    MAP_PRIVATE : MAP_SHARED,
+        ulog = mmap(0, new_size, PROT_READ | PROT_WRITE, MAP_SHARED,
                     log_ctx->ulogfd, 0);
         if (ulog == MAP_FAILED) {
             log_ctx->ulog = NULL;
@@ -605,7 +607,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
             log_ctx->ulog = NULL;
             log_ctx->map_size = 0;
         }
-        log_ctx->flags = 0;
     }
 
     if (stat(logname, &st) == -1) {
@@ -626,7 +627,6 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
         }
     }
     context->kdblog_context = log_ctx;
-    log_ctx->flags = flags & ULOG_MAP_FLAGS;
     log_ctx->ulog = ulog;
     log_ctx->ulogentries = ulogentries;
     log_ctx->ulogfd = ulogfd;

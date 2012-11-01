@@ -55,12 +55,15 @@ extern "C" {
  * Default ulog file attributes
  */
 #define DEF_ULOGENTRIES 1000
+#define MIN_ULOGENTRIES 10
 #define ULOG_IDLE_TIME  10              /* in seconds */
 /*
- * Max size of update entry + update header
- * We make this large since resizing can be costly.
+ * The ulog is sized as a header plus an array of fixed sized entries
+ * whose size must be a multiple of 2048 and whose size must fit in a
+ * 16-bit unsigned integer (see struct kdb_hlog's kdb_block field).
  */
-#define ULOG_BLOCK      2048            /* Default size of principal record */
+#define ULOG_BLOCK      2048                /* Default size of princ. record */
+#define ULOG_MAX_BLOCK  ((1<<16) - ULOG_BLOCK) /* Maximum size of princ. record */
 
 #define MAXLOGLEN       0x10000000      /* 256 MB log file */
 
@@ -121,8 +124,10 @@ typedef struct kdb_ent_header {
 
 typedef struct _kdb_log_context {
     iprop_role      iproprole;
+    char            *logname;
     kdb_hlog_t      *ulog;
-    size_t          map_size;
+    time_t          mtime;          /* To detect when to re-open ulog */
+    size_t          size;
     uint32_t        ulogentries;
     int             ulogfd;
 } kdb_log_context;

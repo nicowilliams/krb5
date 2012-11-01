@@ -62,8 +62,8 @@ extern "C" {
  * whose size must be a multiple of 2048 and whose size must fit in a
  * 16-bit unsigned integer (see struct kdb_hlog's kdb_block field).
  */
-#define ULOG_BLOCK      2048                /* Default size of princ. record */
-#define ULOG_MAX_BLOCK  ((1<<16) - ULOG_BLOCK) /* Maximum size of princ. record */
+#define ULOG_BLOCK      2048                   /* Default princ. record size */
+#define ULOG_MAX_BLOCK  ((1<<16) - ULOG_BLOCK) /* Maximum princ. record size */
 
 #define MAXLOGLEN       0x10000000      /* 256 MB log file */
 

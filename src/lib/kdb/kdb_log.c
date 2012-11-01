@@ -606,7 +606,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
     if (do_reset || ulog->kdb_block < ULOG_BLOCK ||
         ulog->kdb_block > ULOG_MAX_BLOCK ||
         (SSIZE_MAX - sizeof (*ulog)) / ulog->kdb_block < ulog->kdb_num ||
-        (sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) > (size_t)st.st_size ||
+        (sizeof (*ulog) + ulog->kdb_num * ulog->kdb_block) >
+        (size_t)st.st_size ||
         (ulog->kdb_last_sno > ulog->kdb_num && ulog->kdb_num != 0)) {
         ulog_reset(ulog);
     }

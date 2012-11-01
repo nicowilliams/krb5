@@ -164,7 +164,7 @@ ulog_add_update(krb5_context context, kdb_incr_update_t *upd)
         new_block = recsize / ULOG_BLOCK;
         if (recsize % ULOG_BLOCK)
             new_block++;
-        assert((UINT16_MAX / ULOG_BLOCK) < new_block);
+        assert(new_block < ((UINT16_MAX - sizeof (*ulog)) / ULOG_BLOCK));
         new_block *= ULOG_BLOCK;
         ulog->kdb_block = new_block;
         /* The block size changed; recompute ulogentries. */

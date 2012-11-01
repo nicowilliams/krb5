@@ -896,8 +896,8 @@ krb5_db_put_principal(krb5_context kcontext, krb5_db_entry *entry)
      * ulog not opened.  This happens in the kdb5_util create and load
      * cases since there's no point in logging the updates then do.
      */
-    if (log_ctx && (log_ctx->iproprole == IPROP_MASTER) &&
-        (log_ctx->flags & ULOG_MAP_ENTRIES)) {
+    if (log_ctx && log_ctx->iproprole == IPROP_MASTER &&
+        log_ctx->size > sizeof(*log_ctx->ulog)) {
         upd = k5alloc(sizeof(*upd), &status);
         if (upd == NULL)
             goto clean_n_exit;

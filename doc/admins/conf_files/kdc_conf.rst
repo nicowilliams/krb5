@@ -192,9 +192,13 @@ For each realm, the following tags may be specified:
     propagation is enabled.  The default value is false.
 
 **iprop_master_ulogsize**
-    (Integer.)  Specifies the maximum number of log entries to be
-    retained for incremental propagation.  The maximum value is 2500;
-    the default value is 1000.
+    (Integer.)  Specifies the intended size of the incremental
+    propagation log (ulog) file in maximum-size entries.  This parameter
+    applies whenever a ulog is created or reset.  The maximum entry size
+    is currently 63488 bytes.  For a value of 1000, then, the size of
+    the ulog will be approximately 62MB.  The default value is 1000, the
+    minimum value is 10, and the maximum depends on the availability of
+    virtual memory address space and other system limits.
 
 **iprop_slave_poll**
     (Delta time string.)  Specifies how often the slave KDC polls for

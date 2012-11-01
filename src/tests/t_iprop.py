@@ -199,11 +199,10 @@ while i > 0:
 
 f = open(ulog, 'r')
 f.seek(0, 2)
-ulog_sz = f.tell()
+new_ulog_sz = f.tell()
 f.close()
-# XXX Fix this so we check that kdb_block changed and file size didn't.
-if (ulog_sz != (40 + 10 * ((1<<16) - 2048))):
-    fail('Incorrect ulog size ' + str(ulog_sz))
+if (new_ulog_sz != ulog_sz):
+    fail('Incorrect ulog size %d' % (new_ulog_sz, ))
 
 # Now we test changes to the ulog entry size
 i = 50
@@ -215,7 +214,9 @@ f = open(ulog, 'r')
 f.seek(0, 2)
 new_ulog_sz = f.tell()
 f.close()
-# XXX Fix this so we check that kdb_block changed and file size didn't.
+out = realm.run_as_master([kproplog, '-h'])
+if 'Entry block size : 6144' not in out:
+    fail('Incorrect block size in master ulog')
 if (new_ulog_sz != ulog_sz):
     fail('Ulog did not grow as expected')
 out = realm.run_as_master([kproplog])

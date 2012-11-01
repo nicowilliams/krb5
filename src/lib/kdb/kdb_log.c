@@ -526,6 +526,8 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
             retval = ENOMEM;
             goto error;
         }
+    }
+    if (log_ctx->logname == NULL) {
         log_ctx->logname = strdup(logname);
         if (log_ctx->logname == NULL)
             return ENOMEM;
@@ -558,24 +560,19 @@ ulog_map(krb5_context context, const char *logname, uint32_t ulogentries,
      *
      * (Because we know that st_size is never negative if fstat(2) succeeded we
      * don't bother writing "st.st_size >= 0 && (size_t)st.st_size ...".)
+     *
+     * We don't care for (st.st_size - sizeof (*ulog)) % ulog->kdb_block to be
+     * zero: as kdb_block changes we don't resize the file, so this is bound to
+     * be not zero.
      */
     assert(st.st_size >= 0);
-    if ((size_t)st.st_size <= sizeof (*ulog)) {
-        log_ctx->size = sizeof (*ulog);
-        st.st_size = sizeof (*ulog);
-    }
-
+    log_ctx->size = sizeof (*ulog) + ulogentries * ULOG_MAX_BLOCK;
     if (!(flags & ULOG_MAP_ENTRIES))
         log_ctx->size = sizeof (*ulog);
-    else if ((flags & ULOG_RESET) || (size_t)st.st_size <= sizeof (*ulog))
-        log_ctx->size = sizeof (*ulog) + ulogentries * ULOG_MAX_BLOCK;
     else if ((size_t)st.st_size > sizeof (*ulog) &&
-        (((size_t)st.st_size - sizeof (*ulog)) % ULOG_BLOCK) == 0 &&
         (((size_t)st.st_size - sizeof (*ulog)) / ULOG_MAX_BLOCK) >=
         MIN_ULOGENTRIES)
         log_ctx->size = st.st_size;
-    else
-        log_ctx->size = sizeof (*ulog) + ulogentries * ULOG_MAX_BLOCK;
 
     /*
      * Make sure that the file is the desired size.  We have to do this because

@@ -184,7 +184,7 @@ ulog_sz = f.tell()
 f.close()
 iprop_ulogsize = int(iprop_kdc_conf['master']['realms']['$realm']\
     ['iprop_master_ulogsize'])
-if (ulog_sz != (40 + iprop_ulogsize * 2048)):
+if (ulog_sz != (40 + iprop_ulogsize * ((1<<16) - 2048))):
     fail('Incorrect ulog size ' + str(ulog_sz))
 i = iprop_ulogsize + 5
 iprop_ulogsize += 10
@@ -201,7 +201,8 @@ f = open(ulog, 'r')
 f.seek(0, 2)
 ulog_sz = f.tell()
 f.close()
-if (ulog_sz != (40 + iprop_ulogsize * 2048)):
+# XXX Fix this so we check that kdb_block changed and file size didn't.
+if (ulog_sz != (40 + 10 * ((1<<16) - 2048))):
     fail('Incorrect ulog size ' + str(ulog_sz))
 
 # Now we test changes to the ulog entry size
@@ -214,7 +215,8 @@ f = open(ulog, 'r')
 f.seek(0, 2)
 new_ulog_sz = f.tell()
 f.close()
-if (new_ulog_sz <= ulog_sz):
+# XXX Fix this so we check that kdb_block changed and file size didn't.
+if (new_ulog_sz != ulog_sz):
     fail('Ulog did not grow as expected')
 out = realm.run_as_master([kproplog])
 

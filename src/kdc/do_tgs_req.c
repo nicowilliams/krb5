@@ -285,6 +285,12 @@ tgt_again:
     if (!is_local_principal(header_enc_tkt->client))
         setflag(c_flags, KRB5_KDB_FLAG_CROSS_REALM);
 
+    /*
+     * XXX Note that this is bogus: we end up setting is_referral = TRUE
+     * even when there's no referral in x-realm cases because we're
+     * comparing a krbtgt/REALM@REALM to the requested service princ
+     * name, which obviously won't match.  This is mostly harmless.
+     */
     is_referral = krb5_is_tgs_principal(server->princ) &&
         !krb5_principal_compare(kdc_context, tgs_server, server->princ);
 
@@ -417,10 +423,22 @@ tgt_again:
         subject_tkt = header_enc_tkt;
     authtime = subject_tkt->times.authtime;
 
-    if (is_referral)
+    if (is_referral) {
+        /*
+         * We're working around a JDK 6 interop bug here: the JDK6
+         * client expects TGTs to have NT-SRV-INST name type.  This is
+         * really a bug in JDK6, and it is fixed in later releases, but
+         * we need to work around it here.
+         *
+         * XXX Note that we're smashing server->princ->type -- it's not
+         * our right to do this, but it works and it's harmless.  A
+         * fuller fix will be forthcoming from MIT in due time.
+         */
+        server->princ->type = KRB5_NT_SRV_INST;
         ticket_reply.server = server->princ;
-    else
+    } else {
         ticket_reply.server = request->server; /* XXX careful for realm... */
+    }
 
     enc_tkt_reply.flags = 0;
     enc_tkt_reply.times.starttime = 0;

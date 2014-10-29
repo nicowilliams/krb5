@@ -137,7 +137,7 @@ passwd_check(kadm5_server_handle_t handle, const char *password,
     for (h = handle->qual_handles; *h != NULL; h++) {
         ret = k5_pwqual_check(handle->context, *h, password, polname, princ);
         if (ret != 0) {
-            const char *e = krb5_get_error_message(handle->context, ret);
+            const char *e = k5_get_plain_error_message(handle->context, ret);
             const char *modname = k5_pwqual_name(handle->context, *h);
             char *princname;
             if (krb5_unparse_name(handle->context, princ, &princname) != 0)

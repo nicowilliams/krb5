@@ -115,6 +115,7 @@ k5_free_otp_tokeninfo
 k5_free_pa_otp_challenge
 k5_free_pa_otp_req
 k5_free_serverlist
+k5_get_plain_error_message
 k5_hostrealm_free_context
 k5_init_trace
 k5_kt_get_principal

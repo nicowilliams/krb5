@@ -1656,7 +1656,7 @@ init_creds_step_reply(krb5_context context,
     cc_cleanup:
         if (code !=0) {
             const char *msg;
-            msg = krb5_get_error_message(context, code);
+            msg = k5_get_plain_error_message(context, code);
             krb5_set_error_message(context, code,
                                    _("%s while storing credentials"), msg);
             krb5_free_error_message(context, msg);

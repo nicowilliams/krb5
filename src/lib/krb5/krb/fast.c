@@ -212,7 +212,7 @@ krb5int_fast_as_armor(krb5_context context,
         }
         if (retval != 0) {
             const char * errmsg;
-            errmsg = krb5_get_error_message(context, retval);
+            errmsg = k5_get_plain_error_message(context, retval);
             krb5_set_error_message(context, retval,
                                    _("%s constructing AP-REQ armor"), errmsg);
             krb5_free_error_message(context, errmsg);
@@ -394,7 +394,7 @@ decrypt_fast_reply(krb5_context context,
                                 encrypted_response, &scratch);
     if (retval != 0) {
         const char * errmsg;
-        errmsg = krb5_get_error_message(context, retval);
+        errmsg = k5_get_plain_error_message(context, retval);
         krb5_set_error_message(context, retval,
                                _("%s while decrypting FAST reply"), errmsg);
         krb5_free_error_message(context, errmsg);

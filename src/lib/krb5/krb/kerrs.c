@@ -117,16 +117,73 @@ krb5_copy_error_message(krb5_context dest_ctx, krb5_context src_ctx)
     }
 }
 
+static const char *
+err_fmt_fmt(const char *err_fmt, long code, const char *msg)
+{
+    struct k5buf buf;
+    const char *p, *s;
+
+    if (err_fmt == NULL)
+        return NULL;
+
+    k5_buf_init_dynamic(&buf);
+
+    for (s = p = err_fmt; p != NULL && *p != '\0'; p++) {
+        if (*p != '%')
+            continue;
+        if (p[1] == '\0')
+            break;
+        k5_buf_add_len(&buf, s, p - s);
+        s = p + 2;
+        switch (p[1]) {
+        case 'M':
+            k5_buf_add(&buf, msg);
+            break;
+        case 'C':
+            k5_buf_add_fmt(&buf, "%ld", code);
+            break;
+        case '%':
+            k5_buf_add(&buf, "%");
+            break;
+        default:
+            k5_buf_add_fmt(&buf, "%%%c", p[1]);
+            break;
+        }
+        p++;
+        continue;
+    }
+    k5_buf_add_len(&buf, s, p - s); /* Remained after last token. */
+
+    return k5_buf_data(&buf);
+}
+
+const char * KRB5_CALLCONV
+k5_get_plain_error_message(krb5_context ctx, krb5_error_code code)
+{
+    if (ctx == NULL)
+        return error_message(code);
+    return k5_get_error(&ctx->err, code);
+}
+
 const char * KRB5_CALLCONV
 krb5_get_error_message(krb5_context ctx, krb5_error_code code)
 {
+    const char *std, *custom;
+
 #ifdef DEBUG
     if (ERROR_MESSAGE_DEBUG())
         fprintf(stderr, "krb5_get_error_message(%p, %ld)\n", ctx, (long)code);
 #endif
     if (ctx == NULL)
         return error_message(code);
-    return k5_get_error(&ctx->err, code);
+
+    std = k5_get_error(&ctx->err, code);
+    custom = err_fmt_fmt(ctx->err_fmt, code, std);
+    if (custom != NULL) {
+        free((char *)std);
+        return custom;
+    }
+    return std;
 }
 
 void KRB5_CALLCONV

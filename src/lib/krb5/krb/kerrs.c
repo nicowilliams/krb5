@@ -117,16 +117,105 @@ krb5_copy_error_message(krb5_context dest_ctx, krb5_context src_ctx)
     }
 }
 
+static const char *
+err_fmt_fmt(const char *err_fmt, long code, const char *msg)
+{
+    const char *p;
+    char *s;
+    char *new_msg;
+    char code_buf[40];          /* enough for a 128-bit integer, + NUL */
+    size_t c_count = 0;
+    size_t m_count = 0;
+    size_t bytes;
+
+    if (err_fmt == NULL)
+        return NULL;
+
+    for (p = err_fmt; p != NULL && *p != '\0'; p++) {
+        if (*p != '%')
+            continue;
+        switch (*++p) {
+        case 'M':
+            m_count++;
+            continue;
+        case 'C':
+            c_count++;
+            continue;
+        }
+    }
+
+    if (c_count == 0 && m_count == 0)
+        return NULL;
+
+    bytes = snprintf(code_buf, sizeof(code_buf), "%ld", code);
+    if (bytes < 0 || bytes >= sizeof(code_buf))
+        return NULL;
+    bytes = strlen(err_fmt) + c_count * bytes + m_count * strlen(msg);
+    new_msg = calloc(1, bytes + 1);
+    if (new_msg == NULL)
+        return NULL;
+
+    for (s = new_msg, p = err_fmt; p != NULL && *p != '\0'; p++) {
+        assert(new_msg + bytes > s);
+        if (*p != '%') {
+            *s++ = *p;
+            continue;
+        }
+        switch (p[1]) {
+        case 'M':
+            if (strlcat(new_msg, msg, bytes) >= bytes) {
+                assert(0);
+                free(new_msg);
+                return NULL;
+            }
+            p++;
+            s += strlen(msg);
+            continue;
+        case 'C':
+            if (strlcat(new_msg, code_buf, bytes) >= bytes) {
+                assert(0);
+                free(new_msg);
+                return NULL;
+            }
+            p++;
+            s += strlen(code_buf);
+            continue;
+        case '\0':
+            break;
+        case '%':
+            *s++ = '%';
+            p++;
+            continue;
+        default:
+            *s++ = '%';
+            *s++ = p[1];
+            p++;
+            continue;
+        }
+    }
+
+    return new_msg;
+}
+
 const char * KRB5_CALLCONV
 krb5_get_error_message(krb5_context ctx, krb5_error_code code)
 {
+    const char *std, *custom;
+
 #ifdef DEBUG
     if (ERROR_MESSAGE_DEBUG())
         fprintf(stderr, "krb5_get_error_message(%p, %ld)\n", ctx, (long)code);
 #endif
     if (ctx == NULL)
         return error_message(code);
-    return k5_get_error(&ctx->err, code);
+
+    std = k5_get_error(&ctx->err, code);
+    custom = err_fmt_fmt(ctx->err_fmt, code, std);
+    if (custom != NULL) {
+        free((char *)std);
+        return custom;
+    }
+    return std;
 }
 
 void KRB5_CALLCONV

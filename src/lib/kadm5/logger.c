@@ -203,7 +203,7 @@ klog_com_err_proc(const char *whoami, long int code, const char *format, va_list
         const char *emsg;
         outbuf[sizeof(outbuf) - 1] = '\0';
 
-        emsg = krb5_get_error_message (err_context, code);
+        emsg = krb5_get_error_message(err_context, code);
         strncat(outbuf, emsg, sizeof(outbuf) - 1 - strlen(outbuf));
         strncat(outbuf, " - ", sizeof(outbuf) - 1 - strlen(outbuf));
         krb5_free_error_message(err_context, emsg);

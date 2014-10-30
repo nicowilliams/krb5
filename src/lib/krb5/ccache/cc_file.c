@@ -79,6 +79,7 @@ extern const krb5_cc_ops krb5_cc_file_ops;
 krb5_error_code krb5_change_cache(void);
 
 static krb5_error_code interpret_errno(krb5_context, int);
+static krb5_error_code fcc_set_error(krb5_context, krb5_error_code, const char *);
 
 /* The cache format version is a positive integer, represented in the cache
  * file as a two-byte big endian number with 0x0500 added to it. */
@@ -336,6 +337,19 @@ open_cache_file(krb5_context context, const char *filename,
                       filename);
             return ret;
         } else {
+            /*
+             * Failure due to EEXIST should be recoverable, since we
+             * tried unlinking the file: we must be racing with some
+             * other process/thread initializing the same ccache.  We
+             * could lock it then either repeat this process up to some
+             * number of times, or check that the new ccache has the
+             * header we would have written below and repeat this if it
+             * doesn't.
+             *
+             * In practice EEXIST here is quite unlikely, which is why
+             * we don't bother recovering.  But we should check the
+             * unlink() calls' status.
+             */
             return interpret_errno(context, errno);
         }
     }
@@ -521,7 +535,7 @@ cleanup:
     close(fd);
     k5_cc_mutex_lock(context, &data->lock);
     krb5_change_cache();
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 /* Release an fcc_data object. */
@@ -647,7 +661,7 @@ cleanup:
     free(id);
 
     krb5_change_cache();
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 extern const krb5_cc_ops krb5_fcc_ops;
@@ -741,7 +755,7 @@ cleanup:
     free(fcursor);
     krb5_free_principal(context, princ);
     k5_cc_mutex_unlock(context, &data->lock);
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 /* Get the next credential from the cache file. */
@@ -786,7 +800,7 @@ cleanup:
     k5_cc_mutex_unlock(context, &fcursor->lock);
     k5_cc_mutex_unlock(context, &data->lock);
     k5_buf_free(&buf);
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 /* Release an iteration cursor. */
@@ -903,7 +917,7 @@ err_out:
     k5_cc_mutex_destroy(&data->lock);
     free(data->filename);
     free(data);
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 /*
@@ -948,7 +962,7 @@ fcc_get_principal(krb5_context context, krb5_ccache id, krb5_principal *princ)
 cleanup:
     (void)close_cache_file(context, fp);
     k5_cc_mutex_unlock(context, &data->lock);
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 /* Search for a credential within the cache file. */
@@ -956,8 +970,10 @@ static krb5_error_code KRB5_CALLCONV
 fcc_retrieve(krb5_context context, krb5_ccache id, krb5_flags whichfields,
              krb5_creds *mcreds, krb5_creds *creds)
 {
-    return k5_cc_retrieve_cred_default(context, id, whichfields, mcreds,
-                                       creds);
+    return fcc_set_error(context,
+                         k5_cc_retrieve_cred_default(context, id, whichfields,
+                                                     mcreds, creds),
+                         ((fcc_data *)id->data)->filename);
 }
 
 /* Store a credential in the cache file. */
@@ -999,7 +1015,7 @@ cleanup:
     k5_buf_free(&buf);
     ret2 = close_cache_file(context, fp);
     k5_cc_mutex_unlock(context, &data->lock);
-    return ret ? ret : ret2;
+    return fcc_set_error(context, ret ? ret : ret2, data->filename);
 }
 
 /* Non-functional stub for removing a cred from the cache file. */
@@ -1082,7 +1098,7 @@ fcc_ptcursor_next(krb5_context context, krb5_cc_ptcursor cursor,
 
     ret = krb5_cc_resolve(context, defname, &cache);
     if (ret)
-        return ret;
+        return fcc_set_error(context, ret, defname);
     *cache_out = cache;
     return 0;
 }
@@ -1119,7 +1135,7 @@ fcc_last_change_time(krb5_context context, krb5_ccache id,
 
     k5_cc_mutex_unlock(context, &data->lock);
 
-    return ret;
+    return fcc_set_error(context, ret, data->filename);
 }
 
 /* Lock the cache handle against other threads.  (This does not lock the cache
@@ -1141,18 +1157,32 @@ fcc_unlock(krb5_context context, krb5_ccache id)
     return 0;
 }
 
+static krb5_error_code
+fcc_set_error(krb5_context context, krb5_error_code ret, const char *fname)
+{
+    if (context->err.code == ret || fname == NULL || ret == KRB5_CC_NOMEM ||
+        ret == 0)
+        return ret;
+    if (context->err.msg != NULL && strstr(context->err.msg, fname) != NULL)
+        return ret;
+
+    k5_clear_error(&context->err);
+
+    if (context->err.msg == NULL)
+        k5_setmsg(context, ret, "%s (filename: %s)", error_message(ret), fname);
+    else
+        k5_setmsg(context, ret, "%s (filename: %s)", context->err.msg, fname);
+    return ret;
+}
+
 /* Translate a system errno value to a Kerberos com_err code. */
 static krb5_error_code
 interpret_errno(krb5_context context, int errnum)
 {
-    krb5_error_code ret;
+    krb5_error_code ret = 0;
 
     switch (errnum) {
     case ENOENT:
-        ret = KRB5_FCC_NOFILE;
-        break;
-    case EPERM:
-    case EACCES:
 #ifdef EISDIR
     case EISDIR:                /* Mac doesn't have EISDIR */
 #endif
@@ -1160,20 +1190,20 @@ interpret_errno(krb5_context context, int errnum)
 #ifdef ELOOP
     case ELOOP:                 /* Bad symlink is like no file. */
 #endif
-#ifdef ETXTBSY
-    case ETXTBSY:
+#ifdef ENAMETOOLONG
+    case ENAMETOOLONG:          /* Name too long is like no file */
 #endif
+        ret = KRB5_FCC_NOFILE;
+        break;
+    case EPERM:
+    case EACCES:
     case EBUSY:
-    case EROFS:
+    case EROFS:                 /* ROFS is like bad perms */
         ret = KRB5_FCC_PERM;
         break;
     case EINVAL:
-    case EEXIST:
     case EFAULT:
     case EBADF:
-#ifdef ENAMETOOLONG
-    case ENAMETOOLONG:
-#endif
 #ifdef EWOULDBLOCK
     case EWOULDBLOCK:
 #endif
@@ -1182,15 +1212,25 @@ interpret_errno(krb5_context context, int errnum)
 #ifdef EDQUOT
     case EDQUOT:
 #endif
+    case EEXIST:                /* Need a better error for EEXIST */
     case ENOSPC:
     case EIO:
     case ENFILE:
     case EMFILE:
     case ENXIO:
+#ifdef ETXTBSY
+    case ETXTBSY:
+#endif
     default:
+        /*
+         * For the default case it'd be nice to use a different error
+         * code than KRB5_CC_IO, since it may be indicative of an error
+         * we should have a switch arm for.
+         */
         ret = KRB5_CC_IO;
-        k5_setmsg(context, ret,
-                  _("Credentials cache I/O operation failed (%s)"),
+    }
+    if (ret != KRB5_FCC_INTERNAL) {
+        k5_setmsg(context, ret, _("%s (%s)"), error_message(ret),
                   strerror(errnum));
     }
     return ret;

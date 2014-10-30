@@ -215,6 +215,8 @@ static krb5_error_code krb5_fcc_store_authdatum
 
 static krb5_error_code krb5_fcc_interpret
 (krb5_context, int);
+static krb5_error_code fcc_set_error
+(krb5_context, krb5_error_code, const char *);
 
 struct _krb5_fcc_data;
 static krb5_error_code krb5_fcc_close_file
@@ -244,6 +246,9 @@ static krb5_error_code krb5_fcc_data_last_change_time
  * The default credentials cache should be type 3 for now (see
  * init_ctx.c).
  */
+static krb5_error_code fcc_set_error(krb5_context, krb5_error_code,
+                                     const char *);
+
 
 #define KRB5_FCC_FVNO_1 0x0501          /* krb v5, fcc v1 */
 #define KRB5_FCC_FVNO_2 0x0502          /* krb v5, fcc v2 */
@@ -1383,7 +1388,7 @@ done:
         (void) krb5_unlock_file(context, f);
         (void) close(f);
     }
-    return retval;
+    return fcc_set_error(context, retval, data->filename);
 }
 
 static krb5_error_code
@@ -1651,8 +1656,8 @@ cleanup:
     dereference(context, data);
     free(id);
 
-    krb5_change_cache ();
-    return kret;
+    krb5_change_cache();
+    return fcc_set_error(context, kret, data->filename);
 }
 
 extern const krb5_cc_ops krb5_fcc_ops;
@@ -1788,7 +1793,7 @@ krb5_fcc_start_seq_get(krb5_context context, krb5_ccache id,
         if (kret) {
             free(fcursor);
             k5_cc_mutex_unlock(context, &data->lock);
-            return kret;
+            return fcc_set_error(context, kret, data->filename);
         }
     }
 
@@ -1810,7 +1815,7 @@ krb5_fcc_start_seq_get(krb5_context context, krb5_ccache id,
 done:
     MAYBE_CLOSE(context, id, kret);
     k5_cc_mutex_unlock(context, &data->lock);
-    return kret;
+    return fcc_set_error(context, kret, data->filename);
 }
 
 
@@ -1889,7 +1894,7 @@ lose:
     k5_cc_mutex_unlock(context, &d->lock);
     if (kret != KRB5_OK)
         krb5_free_cred_contents(context, creds);
-    return kret;
+    return fcc_set_error(context, kret, d->filename);
 }
 
 /*
@@ -1932,6 +1937,13 @@ krb5int_fcc_new_unique(krb5_context context, char *template, krb5_ccache *id)
     krb5_int16 fcc_flen = 0;
     int errsave, cnt;
     struct fcc_set *setptr;
+
+    /*
+     * XXX What to pass to krb5_fcc_interpret() as the filename here?
+     *
+     * Options: NULL, the template, a constant (localized) string
+     * like "<temporary file>", or a composition of the last two.
+     */
 
     /* Set master lock */
     k5_cc_mutex_lock(context, &krb5int_cc_file_mutex);
@@ -2061,7 +2073,7 @@ err_out:
     k5_cc_mutex_destroy(&data->lock);
     free(data->filename);
     free(data);
-    return kret;
+    return fcc_set_error(context, kret, data->filename);
 }
 
 /*
@@ -2131,15 +2143,17 @@ krb5_fcc_get_principal(krb5_context context, krb5_ccache id, krb5_principal *pri
 done:
     MAYBE_CLOSE(context, id, kret);
     k5_cc_mutex_unlock(context, &((krb5_fcc_data *) id->data)->lock);
-    return kret;
+    return fcc_set_error(context, kret, ((krb5_fcc_data *)id->data)->filename);
 }
 
 
 static krb5_error_code KRB5_CALLCONV
 krb5_fcc_retrieve(krb5_context context, krb5_ccache id, krb5_flags whichfields, krb5_creds *mcreds, krb5_creds *creds)
 {
-    return k5_cc_retrieve_cred_default(context, id, whichfields, mcreds,
-                                       creds);
+    return fcc_set_error(context,
+                         k5_cc_retrieve_cred_default(context, id, whichfields,
+                                                     mcreds, creds),
+                         ((krb5_fcc_data *)id->data)->filename);
 }
 
 
@@ -2198,8 +2212,8 @@ lose:
     MAYBE_CLOSE(context, id, ret);
     k5_cc_mutex_unlock(context, &((krb5_fcc_data *) id->data)->lock);
     krb5_change_cache ();
-    return ret;
 #undef TCHECK
+    return fcc_set_error(context, ret, ((krb5_fcc_data *)id->data)->filename);
 }
 
 /*
@@ -2382,6 +2396,26 @@ krb5_fcc_unlock(krb5_context context, krb5_ccache id)
 }
 
 static krb5_error_code
+fcc_set_error(krb5_context context, krb5_error_code ret, const char *fname)
+{
+    if (ret == KRB5_CC_NOMEM)
+        return ret;
+
+    if (ret == 0) {
+        krb5_clear_error_message(context);
+        return 0;
+    }
+
+    if (fname == NULL)
+        krb5_set_error_message(context, ret, "%s", error_message(ret));
+    else
+        krb5_set_error_message(context, ret, "%s (filename: %s)",
+                               error_message(ret), fname);
+    return ret;
+}
+
+/* Translate a system errno value to a Kerberos com_err code. */
+static krb5_error_code
 krb5_fcc_data_last_change_time(krb5_context context, krb5_fcc_data *data,
                                krb5_timestamp *change_time)
 {
@@ -2409,13 +2443,9 @@ krb5_fcc_data_last_change_time(krb5_context context, krb5_fcc_data *data,
 static krb5_error_code
 krb5_fcc_interpret(krb5_context context, int errnum)
 {
-    register krb5_error_code retval;
+    register krb5_error_code ret;
     switch (errnum) {
     case ENOENT:
-        retval = KRB5_FCC_NOFILE;
-        break;
-    case EPERM:
-    case EACCES:
 #ifdef EISDIR
     case EISDIR:                        /* Mac doesn't have EISDIR */
 #endif
@@ -2423,40 +2453,50 @@ krb5_fcc_interpret(krb5_context context, int errnum)
 #ifdef ELOOP
     case ELOOP:                         /* Bad symlink is like no file. */
 #endif
-#ifdef ETXTBSY
-    case ETXTBSY:
+#ifdef ENAMETOOLONG
+    case ENAMETOOLONG:          /* Name too long is like no file */
 #endif
+        ret = KRB5_FCC_NOFILE;
+        break;
+    case EPERM:
+    case EACCES:
     case EBUSY:
-    case EROFS:
-        retval = KRB5_FCC_PERM;
+    case EROFS:                 /* ROFS is like bad perms */
+        ret = KRB5_FCC_PERM;
         break;
     case EINVAL:
-    case EEXIST:                        /* XXX */
     case EFAULT:
     case EBADF:
-#ifdef ENAMETOOLONG
-    case ENAMETOOLONG:
-#endif
 #ifdef EWOULDBLOCK
     case EWOULDBLOCK:
 #endif
-        retval = KRB5_FCC_INTERNAL;
+        ret = KRB5_FCC_INTERNAL;
         break;
 #ifdef EDQUOT
     case EDQUOT:
 #endif
+    case EEXIST:                /* Need a better error for EEXIST */
     case ENOSPC:
     case EIO:
     case ENFILE:
     case EMFILE:
     case ENXIO:
+#ifdef ETXTBSY
+    case ETXTBSY:
+#endif
     default:
-        retval = KRB5_CC_IO;            /* XXX */
-        krb5_set_error_message(context, retval,
-                               _("Credentials cache I/O operation failed "
-                                 "(%s)"), strerror(errnum));
+        /*
+         * For the default case it'd be nice to use a different error
+         * code than KRB5_CC_IO, since it may be indicative of an error
+         * we should have a switch arm for.
+         */
+        ret = KRB5_CC_IO;
     }
-    return retval;
+    if (ret != KRB5_FCC_INTERNAL) {
+        krb5_set_error_message(context, ret, _("%s (%s)"), error_message(ret),
+                               strerror(errnum));
+    }
+    return ret;
 }
 
 const krb5_cc_ops krb5_fcc_ops = {

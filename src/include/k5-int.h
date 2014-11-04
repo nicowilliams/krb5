@@ -2276,4 +2276,7 @@ krb5_set_error_message_fl(krb5_context ctx, krb5_error_code code,
 #endif
     ;
 
+const char * KRB5_CALLCONV
+k5_get_plain_error_message(krb5_context ctx, krb5_error_code code);
+
 #endif /* _KRB5_INT_H */

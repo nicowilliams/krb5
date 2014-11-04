@@ -26,6 +26,7 @@
  * or implied warranty.
  */
 
+
 /*
   If OPENCLOSE is defined, each of the functions opens and closes the
   file whenever it needs to access it.  Otherwise, the file is opened

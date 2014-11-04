@@ -246,6 +246,8 @@ static krb5_error_code krb5_fcc_data_last_change_time
  * The default credentials cache should be type 3 for now (see
  * init_ctx.c).
  */
+static krb5_error_code fcc_set_error(krb5_context, krb5_error_code,
+                                     const char *);
 
 
 #define KRB5_FCC_FVNO_1 0x0501          /* krb v5, fcc v1 */
@@ -2396,20 +2398,19 @@ krb5_fcc_unlock(krb5_context context, krb5_ccache id)
 static krb5_error_code
 fcc_set_error(krb5_context context, krb5_error_code ret, const char *fname)
 {
-    if (context->err.code == ret || fname == NULL || ret == KRB5_CC_NOMEM ||
-        ret == 0)
-        return ret;
-    if (context->err.msg != NULL && strstr(context->err.msg, fname) != NULL)
+    if (ret == KRB5_CC_NOMEM)
         return ret;
 
-    k5_clear_error(&context->err);
+    if (ret == 0) {
+        krb5_clear_error_message(context);
+        return 0;
+    }
 
-    if (context->err.msg == NULL)
-        krb5_set_error_message(context, ret, "%s (filename: %s)",
-                               error_message(ret), fname);
+    if (fname == NULL)
+        krb5_set_error_message(context, ret, "%s", error_message(ret));
     else
         krb5_set_error_message(context, ret, "%s (filename: %s)",
-                               context->err.msg, fname);
+                               error_message(ret), fname);
     return ret;
 }
 

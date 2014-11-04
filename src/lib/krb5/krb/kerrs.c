@@ -126,7 +126,8 @@ err_fmt_fmt(const char *err_fmt, long code, const char *msg)
     char code_buf[40];          /* enough for a 128-bit integer, + NUL */
     size_t c_count = 0;
     size_t m_count = 0;
-    size_t bytes;
+    size_t sz;
+    int bytes;
 
     if (err_fmt == NULL)
         return NULL;
@@ -148,22 +149,22 @@ err_fmt_fmt(const char *err_fmt, long code, const char *msg)
         return NULL;
 
     bytes = snprintf(code_buf, sizeof(code_buf), "%ld", code);
-    if (bytes < 0 || bytes >= sizeof(code_buf))
+    if (bytes < 0 || (size_t)bytes >= sizeof(code_buf))
         return NULL;
-    bytes = strlen(err_fmt) + c_count * bytes + m_count * strlen(msg);
-    new_msg = calloc(1, bytes + 1);
+    sz = strlen(err_fmt) + c_count * bytes + m_count * strlen(msg);
+    new_msg = calloc(1, sz + 1);
     if (new_msg == NULL)
         return NULL;
 
     for (s = new_msg, p = err_fmt; p != NULL && *p != '\0'; p++) {
-        assert(new_msg + bytes > s);
+        assert(new_msg + sz > s);
         if (*p != '%') {
             *s++ = *p;
             continue;
         }
         switch (p[1]) {
         case 'M':
-            if (strlcat(new_msg, msg, bytes) >= bytes) {
+            if (strlcat(new_msg, msg, sz) >= sz) {
                 assert(0);
                 free(new_msg);
                 return NULL;
@@ -172,7 +173,7 @@ err_fmt_fmt(const char *err_fmt, long code, const char *msg)
             s += strlen(msg);
             continue;
         case 'C':
-            if (strlcat(new_msg, code_buf, bytes) >= bytes) {
+            if (strlcat(new_msg, code_buf, sz) >= sz) {
                 assert(0);
                 free(new_msg);
                 return NULL;

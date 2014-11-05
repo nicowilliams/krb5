@@ -308,8 +308,9 @@ prepend_err_str(krb5_context ctx, const char *str, krb5_error_code err,
 {
     const char *omsg;
 
-    omsg = krb5_get_error_message(ctx, oerr);
+    omsg = k5_get_plain_error_message(ctx, oerr);
     krb5_set_error_message(ctx, err, "%s %s", str, omsg);
+    k5_setmsg(ctx, err, "%s %s", str, omsg);
     krb5_free_error_message(ctx, omsg);
 }
 

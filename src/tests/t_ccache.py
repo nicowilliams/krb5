@@ -33,7 +33,7 @@ test_keyring = (keyctl is not None and
 # Test kdestroy and klist of a non-existent ccache.
 realm.run([kdestroy])
 output = realm.run([klist], expected_code=1)
-if 'No credentials cache found' not in output:
+if ' not found' not in output:
     fail('Expected error message not seen in klist output')
 
 realm.addprinc('alice', password('alice'))
@@ -49,7 +49,7 @@ def collection_test(realm, ccname):
         fail('Initial kinit failed to get credentials for alice.')
     realm.run([kdestroy])
     output = realm.run([klist], expected_code=1)
-    if 'No credentials cache found' not in output:
+    if ' not found' not in output:
         fail('Initial kdestroy failed to destroy primary cache.')
     output = realm.run([klist, '-l'], expected_code=1)
     if not output.endswith('---\n') or output.count('\n') != 2:
@@ -127,6 +127,31 @@ if test_keyring:
     realm.run([kdestroy])
     realm.run([keyctl, 'search', '@s', 'keyring', cname], expected_code=1)
     cleanup_keyring('@s', col_ringname)
+
+# Test err_fmt
+realm.stop()
+conf = {'libdefaults': {'err_fmt': 'FOO Error: %M (see http://localhost:1234/%C for more information)'}}
+realm = K5Realm(krb5_conf=conf, create_kdb=False)
+del realm.env['KRB5CCNAME']
+out = realm.run([klist, '-c', 'testdir/xx/yy'], expected_code=1)
+if not out.startswith('klist: FOO Error: ') or \
+   (' (see http://localhost:1234/' not in out) or \
+   not out.endswith(' for more information)\n'):
+    fail('err_fmt expansion failed')
+realm.stop()
+conf = {'libdefaults': {'err_fmt': '%M - %C'}}
+realm = K5Realm(krb5_conf=conf, create_kdb=False)
+del realm.env['KRB5CCNAME']
+out = realm.run([klist, '-c', 'testdir/xx/yy'], expected_code=1)
+if out != 'klist: Credentials cache file \'testdir/xx/yy\' not found - -1765328189\n':
+    fail('err_fmt expansion failed')
+realm.stop()
+conf = {'libdefaults': {'err_fmt': '%%%M %-% %C%'}}
+realm = K5Realm(krb5_conf=conf, create_kdb=False)
+del realm.env['KRB5CCNAME']
+out = realm.run([klist, '-c', 'testdir/xx/yy'], expected_code=1)
+if out != 'klist: %Credentials cache file \'testdir/xx/yy\' not found %-% -1765328189%\n':
+    fail('err_fmt expansion failed')
 
 # Test parameter expansion in default_ccache_name
 realm.stop()

@@ -66,7 +66,7 @@ krb5_ldap_read_startup_information(krb5_context context)
     SETUP_CONTEXT();
     if ((retval=krb5_ldap_read_krbcontainer_dn(context, &(ldap_context->container_dn)))) {
         krb5_prepend_error_message(context, retval,
-                                   _("Unable to read Kerberos container"))
+                                   _("Unable to read Kerberos container"));
         goto cleanup;
     }
 

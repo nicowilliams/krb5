@@ -60,8 +60,9 @@ krb5_validate_ldap_context(krb5_context context,
     if (ldap_context->bind_pwd == NULL &&
         ldap_context->service_password_file != NULL) {
         if ((st=krb5_ldap_readpassword(context, ldap_context, &password)) != 0) {
-            prepend_err_str(context, _("Error reading password from stash: "),
-                            st, st);
+            krb5_prepend_error_message(context, st,
+                                       _("Error reading password from "
+                                         "stash"));
             goto err_out;
         }
 

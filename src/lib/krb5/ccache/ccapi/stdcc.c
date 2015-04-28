@@ -326,7 +326,7 @@ krb5_stdccv3_generate_new (krb5_context context, krb5_ccache *id )
     }
 
     if (!err) {
-        newCache = (krb5_ccache) malloc (sizeof (*newCache));
+        newCache = calloc (1, sizeof (*newCache));
         if (!newCache) { err = KRB5_CC_NOMEM; }
     }
 
@@ -404,7 +404,7 @@ krb5_stdccv3_resolve (krb5_context context, krb5_ccache *id , const char *residu
     }
 
     if (!err) {
-        ccache = (krb5_ccache ) malloc (sizeof (*ccache));
+        ccache = calloc (1, sizeof (*ccache));
         if (!ccache) { err = KRB5_CC_NOMEM; }
     }
 
@@ -936,7 +936,7 @@ krb5_stdccv3_ptcursor_next(
     *ccache = NULL;
 
     if (!err) {
-        newCache = (krb5_ccache) malloc (sizeof (*newCache));
+        newCache = calloc (1, sizeof (*newCache));
         if (!newCache) { err = ccErrNoMem; }
     }
 
@@ -1168,7 +1168,7 @@ krb5_error_code KRB5_CALLCONV  krb5_stdcc_generate_new
         return retval;
 
     retval = KRB5_CC_NOMEM;
-    if (!(newCache = (krb5_ccache) malloc(sizeof(struct _krb5_ccache))))
+    if (!(newCache = calloc(1, sizeof(struct _krb5_ccache))))
         goto errout;
     if (!(ccapi_data = (stdccCacheDataPtr)malloc(sizeof(stdccCacheData))))
         goto errout;
@@ -1225,7 +1225,7 @@ krb5_error_code KRB5_CALLCONV  krb5_stdcc_resolve
         return retval;
 
     retval = KRB5_CC_NOMEM;
-    if (!(newCache = (krb5_ccache) malloc(sizeof(struct _krb5_ccache))))
+    if (!(newCache = calloc(1, sizeof(struct _krb5_ccache))))
         goto errout;
 
     if (!(ccapi_data = (stdccCacheDataPtr)malloc(sizeof(stdccCacheData))))

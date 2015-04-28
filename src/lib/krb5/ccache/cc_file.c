@@ -680,7 +680,7 @@ fcc_resolve(krb5_context context, krb5_ccache *id, const char *residual)
         return ret;
     }
 
-    lid = malloc(sizeof(struct _krb5_ccache));
+    lid = calloc(1, sizeof(struct _krb5_ccache));
     if (lid == NULL) {
         free_fccdata(context, data);
         return KRB5_CC_NOMEM;
@@ -880,7 +880,7 @@ krb5int_fcc_new_unique(krb5_context context, char *template, krb5_ccache *id)
 
     k5_cc_mutex_assert_locked(context, &data->lock);
     k5_cc_mutex_unlock(context, &data->lock);
-    lid = malloc(sizeof(*lid));
+    lid = calloc(1, sizeof(*lid));
     if (lid == NULL) {
         free_fccdata(context, data);
         return KRB5_CC_NOMEM;
@@ -1032,7 +1032,7 @@ fcc_ptcursor_new(krb5_context context, krb5_cc_ptcursor *cursor)
 
     *cursor = NULL;
 
-    n = malloc(sizeof(*n));
+    n = calloc(1, sizeof(*n));
     if (n == NULL)
         return ENOMEM;
     n->ops = &krb5_fcc_ops;

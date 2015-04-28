@@ -47,7 +47,7 @@ krb5_cccol_cursor_new(krb5_context context,
     krb5_cccol_cursor n = NULL;
 
     *cursor = NULL;
-    n = malloc(sizeof(*n));
+    n = calloc(1, sizeof(*n));
     if (n == NULL)
         return ENOMEM;
 

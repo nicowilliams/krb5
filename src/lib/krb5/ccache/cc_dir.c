@@ -303,10 +303,10 @@ make_cache(const char *residual, krb5_ccache fcc, krb5_ccache *cache_out)
     dcc_data *data = NULL;
     char *residual_copy = NULL;
 
-    cache = malloc(sizeof(*cache));
+    cache = calloc(1, sizeof(*cache));
     if (cache == NULL)
         goto oom;
-    data = malloc(sizeof(*data));
+    data = calloc(1, sizeof(*data));
     if (data == NULL)
         goto oom;
     residual_copy = strdup(residual);
@@ -559,7 +559,7 @@ make_cursor(char *dirname, char *primary, DIR *dir,
     data = malloc(sizeof(*data));
     if (data == NULL)
         return ENOMEM;
-    cursor = malloc(sizeof(*cursor));
+    cursor = calloc(1, sizeof(*cursor));
     if (cursor == NULL) {
         free(data);
         return ENOMEM;

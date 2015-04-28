@@ -290,7 +290,7 @@ krb5_mcc_resolve (krb5_context context, krb5_ccache *id, const char *residual)
     }
     k5_cc_mutex_unlock(context, &krb5int_mcc_mutex);
 
-    lid = (krb5_ccache) malloc(sizeof(struct _krb5_ccache));
+    lid = calloc(1, sizeof(struct _krb5_ccache));
     if (lid == NULL)
         return KRB5_CC_NOMEM;
 
@@ -473,7 +473,7 @@ krb5_mcc_generate_new (krb5_context context, krb5_ccache *id)
     krb5_mcc_data *d;
 
     /* Allocate memory */
-    lid = (krb5_ccache) malloc(sizeof(struct _krb5_ccache));
+    lid = calloc(1, sizeof(struct _krb5_ccache));
     if (lid == NULL)
         return KRB5_CC_NOMEM;
 
@@ -641,7 +641,7 @@ krb5_mcc_ptcursor_new(
 
     *cursor = NULL;
 
-    n = malloc(sizeof(*n));
+    n = calloc(1, sizeof(*n));
     if (n == NULL)
         return ENOMEM;
     n->ops = &krb5_mcc_ops;
@@ -671,7 +671,7 @@ krb5_mcc_ptcursor_next(
     if (cdata->cur == NULL)
         return 0;
 
-    *ccache = malloc(sizeof(**ccache));
+    *ccache = calloc(1, sizeof(**ccache));
     if (*ccache == NULL)
         return ENOMEM;
 

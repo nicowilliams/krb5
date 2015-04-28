@@ -906,7 +906,7 @@ make_cache(krb5_context context, key_serial_t collection_id,
     if (pkey < 0)
         pkey = 0;
 
-    ccache = malloc(sizeof(struct _krb5_ccache));
+    ccache = calloc(1, sizeof(struct _krb5_ccache));
     if (!ccache)
         return ENOMEM;
 
@@ -1155,7 +1155,7 @@ krcc_generate_new(krb5_context context, krb5_ccache *id_out)
     }
 
     /* Allocate memory */
-    id = malloc(sizeof(struct _krb5_ccache));
+    id = calloc(1, sizeof(struct _krb5_ccache));
     if (id == NULL) {
         ret = ENOMEM;
         goto cleanup;
@@ -1504,7 +1504,7 @@ krcc_ptcursor_new(krb5_context context, krb5_cc_ptcursor *cursor_out)
     cursor = k5alloc(sizeof(*cursor), &ret);
     if (cursor == NULL)
         return ENOMEM;
-    ptd = k5alloc(sizeof(*ptd), &ret);
+    ptd = k5calloc(1, sizeof(*ptd), &ret);
     if (ptd == NULL)
         goto error;
     cursor->ops = &krb5_krcc_ops;

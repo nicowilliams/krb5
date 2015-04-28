@@ -502,7 +502,7 @@ make_cache(krb5_context context, const char *residual, struct kcmio *io,
             return ret;
     }
 
-    cache = malloc(sizeof(*cache));
+    cache = calloc(1, sizeof(*cache));
     if (cache == NULL)
         goto oom;
     data = calloc(1, sizeof(*data));
@@ -838,7 +838,7 @@ make_ptcursor(const char *residual, struct uuid_list *uuids, struct kcmio *io,
         if (residual_copy == NULL)
             goto oom;
     }
-    cursor = malloc(sizeof(*cursor));
+    cursor = calloc(1, sizeof(*cursor));
     if (cursor == NULL)
         goto oom;
     data = malloc(sizeof(*data));

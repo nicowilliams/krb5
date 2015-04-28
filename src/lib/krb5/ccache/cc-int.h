@@ -36,6 +36,7 @@ struct _krb5_ccache {
     krb5_magic magic;
     const struct _krb5_cc_ops *ops;
     krb5_pointer data;
+    int needs_start_realm_ccconfig;
 };
 
 krb5_error_code

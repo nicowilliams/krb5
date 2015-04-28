@@ -1533,7 +1533,7 @@ krb5_lcc_resolve (krb5_context context, krb5_ccache *id, const char *residual)
     if (!PackageConnectLookup(&LogonHandle, &PackageId))
         return KRB5_FCC_NOFILE;
 
-    lid = (krb5_ccache) malloc(sizeof(struct _krb5_ccache));
+    lid = calloc(1, sizeof(struct _krb5_ccache));
     if (lid == NULL) {
         LsaDeregisterLogonProcess(LogonHandle);
         return KRB5_CC_NOMEM;
@@ -2139,7 +2139,7 @@ krb5_lcc_get_flags(krb5_context context, krb5_ccache id, krb5_flags *flags)
 static krb5_error_code KRB5_CALLCONV
 krb5_lcc_ptcursor_new(krb5_context context, krb5_cc_ptcursor *cursor)
 {
-    krb5_cc_ptcursor new_cursor = (krb5_cc_ptcursor )malloc(sizeof(*new_cursor));
+    krb5_cc_ptcursor new_cursor = calloc(1, sizeof(*new_cursor));
     if (!new_cursor)
         return ENOMEM;
     new_cursor->ops = &krb5_lcc_ops;

@@ -53,6 +53,8 @@ krb5_fwd_tgt_creds(krb5_context context, krb5_auth_context auth_context,
     krb5_enctype enctype = 0;
     krb5_keyblock *session_key;
     krb5_boolean old_use_conf_ktypes = context->use_conf_ktypes;
+    krb5_data start_realm_config;
+    krb5_data start_realm;
 
     memset(&creds, 0, sizeof(creds));
     memset(&tgt, 0, sizeof(creds));
@@ -95,8 +97,17 @@ krb5_fwd_tgt_creds(krb5_context context, krb5_auth_context auth_context,
     if ((retval = krb5_copy_principal(context, client, &creds.client)))
         goto errout;
 
-    retval = krb5int_tgtname(context, &client->realm, &client->realm,
+    if ((retval = krb5_cc_get_config(context, cc, NULL,
+                                     KRB5_CC_CONF_START_REALM,
+                                     &start_realm_config))) {
+        start_realm = client->realm;
+    } else {
+        start_realm = start_realm_config;
+    }
+
+    retval = krb5int_tgtname(context, &start_realm, &start_realm,
                              &creds.server);
+    krb5_free_data_contents(context, &start_realm_config);
     if (retval)
         goto errout;
 

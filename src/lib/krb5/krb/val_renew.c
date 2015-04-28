@@ -141,6 +141,8 @@ get_valrenewed_creds(krb5_context context, krb5_creds *out_creds,
     krb5_error_code code;
     krb5_creds in_creds, *new_creds;
     krb5_principal server = NULL;
+    krb5_data start_realm_config;
+    krb5_data start_realm;
 
     if (in_tkt_service != NULL) {
         /* Parse in_tkt_service, but use the client's realm. */
@@ -153,9 +155,20 @@ get_valrenewed_creds(krb5_context context, krb5_creds *out_creds,
         if (code != 0)
             goto cleanup;
     } else {
-        /* Use the TGT name for the client's realm. */
-        code = krb5int_tgtname(context, &client->realm, &client->realm,
-                               &server);
+        /*
+         * Use the TGT name for the ccache's start-realm, else the
+         * client's realm.
+         */
+        code = krb5_cc_get_config(context, ccache, NULL,
+                                  KRB5_CC_CONF_START_REALM,
+                                  &start_realm_config);
+        if (code != 0)
+            start_realm = client->realm;
+        else
+            start_realm = start_realm_config;
+
+        code = krb5int_tgtname(context, &start_realm, &start_realm, &server);
+        krb5_free_data_contents(context, &start_realm_config);
         if (code != 0)
             goto cleanup;
     }

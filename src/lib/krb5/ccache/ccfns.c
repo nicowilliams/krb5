@@ -60,6 +60,7 @@ krb5_cc_initialize(krb5_context context, krb5_ccache cache,
                    krb5_principal principal)
 {
     TRACE_CC_INIT(context, cache, principal);
+    cache->needs_start_realm_ccconfig = 1;
     return cache->ops->init(context, cache, principal);
 }
 
@@ -83,14 +84,46 @@ krb5_cc_store_cred(krb5_context context, krb5_ccache cache,
     krb5_error_code ret;
     krb5_ticket *tkt;
     krb5_principal s1, s2;
+    int is_local_tgt;
+
 
     TRACE_CC_STORE(context, cache, creds);
     ret = cache->ops->store(context, cache, creds);
     if (ret) return ret;
 
+    is_local_tgt = creds->server->length == 2 &&
+        data_eq_string(creds->server->data[0], KRB5_TGS_NAME) &&
+        data_eq(creds->server->data[1], creds->server->realm);
+
+    if (ret == 0 && needs_start_realm_ccconfig) {
+      if (is_local_tgt) {
+          /*
+           * We're storing a local TGT into a ccache that we just
+           * initialized, so we store in a ccconfig the TGT's realm as
+           * the starting realm for this ccache.
+           */
+          cache->needs_start_realm_ccconfig = 0;
+          ret = krb5_cc_set_config(context, cache, NULL,
+                                   KRB5_CC_CONF_START_REALM,
+                                   &creds->server->realm);
+      } else if (krb5_is_config_principal(context, creds->server) &&
+          data_eq_string(*krb5_princ_component(context, creds->server, 1),
+                         KRB5_CC_CONF_START_REALM)) {
+          /*
+           * We just stored a start-realm ccconfig, so stop looking for
+           * local TGT's whose realm to use as the starting realm.
+           *
+           * This allows ccache copy operations to retain whatever
+           * choice of starting realm was in the source ccache.
+           */
+          cache->needs_start_realm_ccconfig = 0;
+      }
+    }
+
     /*
      * If creds->server and the server in the decoded ticket differ,
-     * store both principals.
+     * store both principals.  This takes care of the empty referral
+     * realm, but might take care of others (just not ccconfig cases).
      */
     s1 = creds->server;
     ret = decode_krb5_ticket(&creds->ticket, &tkt);
@@ -106,6 +139,7 @@ krb5_cc_store_cred(krb5_context context, krb5_ccache cache,
         creds->server = s1;
     }
     krb5_free_ticket(context, tkt);
+
     return ret;
 }
 

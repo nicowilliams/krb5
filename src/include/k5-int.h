@@ -290,6 +290,7 @@ typedef unsigned char   u_char;
 #define KRB5_CC_CONF_PA_TYPE                   "pa_type"
 #define KRB5_CC_CONF_PROXY_IMPERSONATOR        "proxy_impersonator"
 #define KRB5_CC_CONF_REFRESH_TIME              "refresh_time"
+#define KRB5_CC_CONF_START_REALM               "start_realm"
 
 /* Error codes used in KRB_ERROR protocol messages.
    Return values of library routines are based on a different error table

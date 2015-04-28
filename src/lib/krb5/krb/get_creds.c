@@ -789,6 +789,8 @@ get_cached_local_tgt(krb5_context context, krb5_tkt_creds_context ctx,
     krb5_flags flags = KRB5_TC_SUPPORTED_KTYPES;
     krb5_timestamp now;
     krb5_creds *tgt;
+    krb5_data start_realm_config;
+    krb5_data start_realm;
 
     *tgt_out = NULL;
 
@@ -796,9 +798,17 @@ get_cached_local_tgt(krb5_context context, krb5_tkt_creds_context ctx,
     if (code != 0)
         return code;
 
+    code = krb5_cc_get_config(context, ctx->ccache, NULL,
+                              KRB5_CC_CONF_START_REALM,
+                              &start_realm_config);
+    if (code != 0)
+        start_realm = ctx->client->realm;
+    else
+        start_realm = start_realm_config;
+
     /* Construct the principal name. */
-    code = krb5int_tgtname(context, &ctx->client->realm, &ctx->client->realm,
-                           &tgtname);
+    code = krb5int_tgtname(context, &start_realm, &start_realm, &tgtname);
+    krb5_free_data_contents(context, &start_realm_config);
     if (code != 0)
         return code;
 

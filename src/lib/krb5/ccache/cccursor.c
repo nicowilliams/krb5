@@ -227,16 +227,19 @@ krb5_cccol_have_content(krb5_context context)
     krb5_ccache cache;
     krb5_creds creds;
     krb5_boolean found = FALSE;
+    krb5_error_code ret;
 
-    if (krb5_cccol_cursor_new(context, &col_cursor))
+    if ((ret = krb5_cccol_cursor_new(context, &col_cursor)))
         goto no_entries;
 
-    while (!found && !krb5_cccol_cursor_next(context, col_cursor, &cache) &&
+    while (!found &&
+           !krb5_cccol_cursor_next(context, col_cursor, &cache) &&
            cache != NULL) {
-        if (krb5_cc_start_seq_get(context, cache, &cache_cursor))
+        if ((ret = krb5_cc_start_seq_get(context, cache, &cache_cursor)))
             continue;
         while (!found &&
-               !krb5_cc_next_cred(context, cache, &cache_cursor, &creds)) {
+               !(ret = krb5_cc_next_cred(context, cache, &cache_cursor,
+                                         &creds))) {
             if (!krb5_is_config_principal(context, creds.server))
                 found = TRUE;
             krb5_free_cred_contents(context, &creds);
@@ -249,7 +252,7 @@ krb5_cccol_have_content(krb5_context context)
         return 0;
 
 no_entries:
-    krb5_set_error_message(context, KRB5_CC_NOTFOUND,
-                           _("No Kerberos credentials available"));
+    krb5_prepend_error_message2(context, ret, KRB5_CC_NOTFOUND,
+                                _("No Kerberos credentials available"));
     return KRB5_CC_NOTFOUND;
 }

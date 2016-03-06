@@ -28,12 +28,14 @@ SRCS = \
 	$(srcdir)/g_dsp_status.c \
 	$(srcdir)/g_dup_name.c \
 	$(srcdir)/g_encapsulate_token.c \
+	$(srcdir)/g_exp_cookie.c \
 	$(srcdir)/g_exp_sec_context.c \
 	$(srcdir)/g_export_cred.c \
 	$(srcdir)/g_export_name.c \
 	$(srcdir)/g_export_name_comp.c \
 	$(srcdir)/g_get_name_attr.c \
 	$(srcdir)/g_glue.c \
+	$(srcdir)/g_imp_cookie.c \
 	$(srcdir)/g_imp_cred.c \
 	$(srcdir)/g_imp_name.c \
 	$(srcdir)/g_imp_sec_context.c \
@@ -92,12 +94,13 @@ OBJS = \
 	$(OUTPRE)g_dsp_status.$(OBJEXT) \
 	$(OUTPRE)g_dup_name.$(OBJEXT) \
 	$(OUTPRE)g_encapsulate_token.$(OBJEXT) \
-	$(OUTPRE)g_exp_sec_context.$(OBJEXT) \
+	$(OUTPRE)g_exp_cookie.$(OBJEXT) \
 	$(OUTPRE)g_export_cred.$(OBJEXT) \
 	$(OUTPRE)g_export_name.$(OBJEXT) \
 	$(OUTPRE)g_export_name_comp.$(OBJEXT) \
 	$(OUTPRE)g_get_name_attr.$(OBJEXT) \
 	$(OUTPRE)g_glue.$(OBJEXT) \
+	$(OUTPRE)g_imp_cookie.$(OBJEXT) \
 	$(OUTPRE)g_imp_cred.$(OBJEXT) \
 	$(OUTPRE)g_imp_name.$(OBJEXT) \
 	$(OUTPRE)g_imp_sec_context.$(OBJEXT) \
@@ -156,12 +159,14 @@ STLIBOBJS = \
 	g_dsp_status.o \
 	g_dup_name.o \
 	g_encapsulate_token.o \
+	g_exp_cookie.o \
 	g_exp_sec_context.o \
 	g_export_cred.o \
 	g_export_name.o \
 	g_export_name_comp.o \
 	g_get_name_attr.o \
 	g_glue.o \
+	g_imp_cookie.o \
 	g_imp_cred.o \
 	g_imp_name.o \
 	g_imp_sec_context.o \

@@ -571,6 +571,67 @@ gss_import_cred(
     gss_buffer_t,              /* token */
     gss_cred_id_t *);          /* cred_handle */
 
+/* Flag enums don't work in C++. */
+enum gss_export_sec_context_flags {
+    GSS_SEC_CTX_EXPORT_PEER_NAME = 0,
+    GSS_SEC_CTX_EXPORT_PEER_NAME_COMPOSITE
+    GSS_SEC_CTX_EXPORT_LOCAL_NAME,
+    GSS_SEC_CTX_EXPORT_LOCAL_NAME_COMPOSITE,
+    GSS_SEC_CTX_EXPORT_SEQUENCE_STATE,
+    GSS_SEC_CTX_EXPORT_SESSION_BASE_KEYS,
+    GSS_SEC_CTX_EXPORT_SESSION_DERIVED_KEYS,
+    GSS_SEC_CTX_EXPORT_IS_OPEN,
+    GSS_SEC_CTX_EXPORT_WITHOUT_CONFIDENTIALITY,
+    GSS_SEC_CTX_EXPORT_WITHOUT_INTEGRITY,
+    GSS_SEC_CTX_EXPORT_SMALL_INDEX_COOKIE,
+    GSS_SEC_CTX_EXPORT_OTHER_METADATA,
+    GSS_SEC_CTX_EXPORT_FIRST                        = GSS_SEC_CTX_EXPORT_PEER_NAME,
+    GSS_SEC_CTX_EXPORT_LAST                         = GSS_SEC_CTX_EXPORT_OTHER_METADATA
+};
+
+#define GSS_SEC_CTX_EXPORT_INITIATOR_NAME_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_INITIATOR_NAME)
+#define GSS_SEC_CTX_EXPORT_INITIATOR_NAME_COMPOSITE_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_INITIATOR_NAME_COMPOSITE)
+#define GSS_SEC_CTX_EXPORT_ACCEPTOR_NAME_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_ACCEPTOR_NAME)
+#define GSS_SEC_CTX_EXPORT_ACCEPTOR_NAME_COMPOSITE_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_ACCEPTOR_NAME_COMPOSITE)
+#define GSS_SEC_CTX_EXPORT_SEQUENCE_STATE_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_SEQUENCE_STATE)
+#define GSS_SEC_CTX_EXPORT_SESSION_BASE_KEYS_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_SESSION_BASE_KEYS)
+#define GSS_SEC_CTX_EXPORT_SESSION_DERIVED_KEYS_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_SESSION_DERIVED_KEYS)
+#define GSS_SEC_CTX_EXPORT_WITHOUT_CONFIDENTIALITY_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_WITHOUT_CONFIDENTIALITY)
+#define GSS_SEC_CTX_EXPORT_WITHOUT_INTEGRITY_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_WITHOUT_INTEGRITY)
+#define GSS_SEC_CTX_EXPORT_SMALL_INDEX_COOKIE_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_SMALL_INDEX_COOKIE)
+#define GSS_SEC_CTX_EXPORT_OTHER_METADATA_FLAG \
+        (1<<GSS_SEC_CTX_EXPORT_OTHER_METADATA)
+
+OM_uint32 KRB5_CALLCONV
+gss_export_sec_context_cookie(
+    OM_uint32 *,               /* minor_status */
+    gss_ctx_id_t,              /* context_handle */
+    uint64_t,                  /* req_flags */
+    OM_uint32,                 /* lifetime_req */
+    uint64_t *,                /* ret_flags */
+    gss_buffer_t               /* output_token */
+);
+
+/* XXX This needs a credential handle input */
+/* XXX Consider moving the ret_flags to a getter function */
+OM_uint32 KRB5_CALLCONV
+gss_import_sec_context_cookie(
+    OM_uint32 *,               /* minor_status */
+    gss_buffer_t,              /* input_token */
+    gss_ctx_id_t *,            /* context_handle */
+    uint64_t *                 /* ret_flags */
+);
+
 #ifdef __cplusplus
 }
 #endif

@@ -474,6 +474,10 @@ value for the KDC is empty.  New in release 1.17.
 Specifies the name of the host's site for the purpose of DNS-based
 KDC discovery.
 .TP
+\fBsitename_file\fP
+Specifies the path to a file that contains the host's site for the
+purpose of DNS-based KDC discovery.
+.TP
 \fBticket_lifetime\fP
 (duration string.)  Sets the default lifetime for initial
 ticket requests.  The default value is 1 day.
@@ -645,6 +649,10 @@ servers yet.  New in release 1.19.
 \fBsitename\fP
 Specifies the name of the host's site for the purpose of DNS-based
 KDC discovery for this realm.
+.TP
+\fBsitename_file\fP
+Specifies the path to a file that contains the host's site for the
+purpose of DNS-based KDC discovery for this realm.
 .TP
 \fBv4_instance_convert\fP
 This subsection allows the administrator to configure exceptions

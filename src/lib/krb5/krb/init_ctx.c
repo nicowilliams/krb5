@@ -602,12 +602,40 @@ krb5_is_permitted_enctype(krb5_context context, krb5_enctype etype)
     return ret;
 }
 
+static krb5_error_code
+read_sitename_file(krb5_context context, const char *fn, char **out)
+{
+    char buf[64]; /* sitenames cannot be longer than 63 bytes */
+    size_t bytes, i;
+    FILE *f;
+
+    *out = NULL;
+    f = fopen(fn, "r");
+    if (f == NULL)
+        return 0;
+    if ((bytes = fread(buf, 1, sizeof(buf), f)) > 0) {
+        /* And if the sitename is longer than 63 bytes?  Truncate! */
+        buf[bytes] = '\0';
+        for (i = 0; i < bytes; i++) {
+            if (buf[i] == '\r' || buf[i] == '\n') {
+                buf[i] = '\0';
+                break;
+            }
+        }
+    }
+    (void) fclose(f);
+    /* Empty sitename == no sitename */
+    if (bytes && buf[0] != '\0' && (*out = strdup(buf)) == NULL)
+        return ENOMEM;
+    return 0;
+}
 
 krb5_error_code KRB5_CALLCONV
 k5_get_sitename(krb5_context context, const char *realm, char **out)
 {
     krb5_error_code ret = 0;
     char *def_realm = NULL;
+    char *s = NULL;
 
     *out = NULL;
 
@@ -618,12 +646,29 @@ k5_get_sitename(krb5_context context, const char *realm, char **out)
     if (realm == NULL || (def_realm && strcmp(realm, def_realm) == 0))
         ret = profile_get_string(context->profile, KRB5_CONF_LIBDEFAULTS,
                                  KRB5_CONF_SITENAME, NULL, NULL, out);
+    if (ret == 0 && *out == NULL) {
+        ret = profile_get_string(context->profile, KRB5_CONF_LIBDEFAULTS,
+                                 KRB5_CONF_SITENAME_FILE, NULL, NULL, &s);
+        if (ret == 0 && s != NULL)
+            ret = read_sitename_file(context, s, out);
+        free(s);
+        s = NULL;
+    }
 
-    if (ret == 0 && *out == NULL)
+    if (ret == 0 && *out == NULL) {
         ret = profile_get_string(context->profile, KRB5_CONF_REALMS,
                                  realm ? realm : def_realm,
                                  KRB5_CONF_SITENAME, NULL, out);
+        if (ret == 0 && *out == NULL) {
+            ret = profile_get_string(context->profile, KRB5_CONF_REALMS,
+                                     realm ? realm : def_realm,
+                                     KRB5_CONF_SITENAME_FILE, NULL, &s);
+            if (ret == 0 && s != NULL)
+                ret = read_sitename_file(context, s, out);
+        }
+    }
 
+    free(s);
     krb5_free_default_realm(context, def_realm);
     return ret;
 }
